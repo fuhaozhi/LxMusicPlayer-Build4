@@ -1,0 +1,39 @@
+# Codemagic 云构建配置 —— 免费 macOS 构建机，产出未签名 IPA（供小白签签名）
+# 用法见「小白签PRO签名安装.md」方式 C 的 Codemagic 章节
+workflows:
+  build-ipa:
+    name: Build Unsigned IPA
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      node: 22
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Install Node dependencies
+        script: |
+          npm install
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios
+          pod install
+          cd ..
+      - name: Archive iOS app (unsigned)
+        script: |
+          xcodebuild archive \
+            -workspace ios/LxMusicPlayer.xcworkspace \
+            -scheme LxMusicPlayer \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/LxMusicPlayer.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+      - name: Build unsigned IPA
+        script: |
+          mkdir -p build/ipa/Payload
+          cp -R build/LxMusicPlayer.xcarchive/Products/Applications/LxMusicPlayer.app build/ipa/Payload/
+          cd build/ipa
+          zip -qr LxMusicPlayer-unsigned.ipa Payload
+          cd ../..
+    artifacts:
+      - build/ipa/*.ipa

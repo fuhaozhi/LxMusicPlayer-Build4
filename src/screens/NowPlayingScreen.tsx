@@ -1,16 +1,22 @@
-/** 正在播放页：封面/歌词/进度/控制；歌词由当前音源脚本 getLyric 提供 */
-import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+/**
+ * 正在播放页：封面/歌词/进度/控制；歌词由当前音源脚本 getLyric 提供
+ * 浅色清新风：大封面卡片 + 歌词自动滚动 + 圆角控制
+ */
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { formatTime, parseLrc, currentLrcIndex } from '../player/lrc';
 import { usePlayer } from '../player/PlayerContext';
 import { lyricText, toMusicInfo } from '../sourceManager';
 import { useSourceManager } from '../sourceManager';
 import type { LyricInfo } from '../lx-api/types.js';
 
+const LINE_H = 30;
+
 export default function NowPlayingScreen({ manager }: { manager: ReturnType<typeof useSourceManager> }) {
   const { state, toggle, next, prev } = usePlayer();
   const [lyric, setLyric] = useState<LyricInfo | null>(null);
   const [lyricLoading, setLyricLoading] = useState(false);
+  const lrcRef = useRef<ScrollViewInstance>(null);
 
   const song = state.song;
 
@@ -44,10 +50,19 @@ export default function NowPlayingScreen({ manager }: { manager: ReturnType<type
   const lrc = useMemo(() => parseLrc(lyricText(lyric)), [lyric]);
   const currentIdx = currentLrcIndex(lrc, state.currentTime);
 
+  // 歌词自动滚动到当前行
+  useEffect(() => {
+    if (currentIdx >= 0) {
+      lrcRef.current?.scrollTo({ y: Math.max(0, currentIdx * LINE_H - 80), animated: true });
+    }
+  }, [currentIdx]);
+
   if (!song) {
     return (
       <View style={styles.emptyWrap}>
-        <Text style={styles.emptyText}>暂无播放\n在「搜索」页点击歌曲开始播放</Text>
+        <Text style={styles.emptyNote}>♪</Text>
+        <Text style={styles.emptyTitle}>还没有播放</Text>
+        <Text style={styles.emptyHint}>去「搜索」页点一首歌开始</Text>
       </View>
     );
   }
@@ -60,23 +75,35 @@ export default function NowPlayingScreen({ manager }: { manager: ReturnType<type
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>正在播放</Text>
+      </View>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {song.pic ? (
           <Image source={{ uri: song.pic }} style={styles.cover} resizeMode="cover" />
         ) : (
           <View style={[styles.cover, styles.coverPlaceholder]}>
-            <Text style={styles.coverText}>♪</Text>
+            <Text style={styles.coverNote}>♪</Text>
           </View>
         )}
-        <Text style={styles.title} numberOfLines={1}>{song.name}</Text>
-        <Text style={styles.singer} numberOfLines={1}>{song.singer}</Text>
+        <Text style={styles.title} numberOfLines={1}>
+          {song.name}
+        </Text>
+        <Text style={styles.singer} numberOfLines={1}>
+          {song.singer}
+        </Text>
 
-        {/* 歌词 */}
-        <View style={styles.lyricBox}>
+        {/* 歌词卡片 */}
+        <View style={styles.lyricCard}>
           {lyricLoading ? (
-            <ActivityIndicator style={{ marginTop: 16 }} color="#8e8e93" />
+            <ActivityIndicator style={styles.lyricLoading} color="#00B578" />
           ) : lrc.length ? (
-            <View style={styles.lrcList}>
+            <ScrollView
+              ref={lrcRef}
+              style={styles.lrcScroll}
+              showsVerticalScrollIndicator={false}
+              scrollEventThrottle={16}
+            >
               {lrc.map((line, i) => (
                 <Text
                   key={i}
@@ -86,9 +113,9 @@ export default function NowPlayingScreen({ manager }: { manager: ReturnType<type
                   {line.text || '…'}
                 </Text>
               ))}
-            </View>
+            </ScrollView>
           ) : (
-            <Text style={styles.lrcEmpty}>当前音源脚本未提供歌词（或该源不支持 lyric）</Text>
+            <Text style={styles.lrcEmpty}>当前音源未提供歌词</Text>
           )}
         </View>
 
@@ -99,7 +126,11 @@ export default function NowPlayingScreen({ manager }: { manager: ReturnType<type
             <View
               style={[
                 styles.progressFill,
-                { width: `${state.duration > 0 ? Math.min(100, (state.currentTime / state.duration) * 100) : 0}%` as any },
+                {
+                  width: `${
+                    state.duration > 0 ? Math.min(100, (state.currentTime / state.duration) * 100) : 0
+                  }%` as any,
+                },
               ]}
             />
           </View>
@@ -109,7 +140,7 @@ export default function NowPlayingScreen({ manager }: { manager: ReturnType<type
         {/* 控制 */}
         <View style={styles.controls}>
           <Pressable onPress={prev} style={styles.ctrlBtn} hitSlop={8}>
-            <Text style={styles.ctrlIcon}>⏮</Text>
+            <Text style={styles.ctrlIcon}>◁◁</Text>
           </Pressable>
           <Pressable onPress={toggle} style={[styles.ctrlBtn, styles.playBtn]} hitSlop={8}>
             {state.buffering ? (
@@ -119,13 +150,15 @@ export default function NowPlayingScreen({ manager }: { manager: ReturnType<type
             )}
           </Pressable>
           <Pressable onPress={next} style={styles.ctrlBtn} hitSlop={8}>
-            <Text style={styles.ctrlIcon}>⏭</Text>
+            <Text style={styles.ctrlIcon}>▷▷</Text>
           </Pressable>
         </View>
 
         {state.error ? (
           <View style={styles.errorBox}>
-            <Text style={styles.errorText} numberOfLines={2}>{state.error}</Text>
+            <Text style={styles.errorText} numberOfLines={3}>
+              {state.error}
+            </Text>
             {state.url ? (
               <Pressable onPress={openExternal}>
                 <Text style={styles.external}>改用系统浏览器打开</Text>
@@ -139,30 +172,83 @@ export default function NowPlayingScreen({ manager }: { manager: ReturnType<type
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  content: { padding: 20, alignItems: 'center' },
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
-  emptyText: { color: '#8e8e93', fontSize: 15, textAlign: 'center', lineHeight: 24 },
-  cover: { width: 200, height: 200, borderRadius: 12, backgroundColor: '#f2f2f7' },
-  coverPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  coverText: { fontSize: 64, color: '#c7c7cc' },
-  title: { fontSize: 20, fontWeight: '700', color: '#000', marginTop: 14, maxWidth: '100%' },
-  singer: { fontSize: 14, color: '#8e8e93', marginTop: 4 },
-  lyricBox: { width: '100%', minHeight: 120, marginTop: 12 },
-  lrcList: { alignItems: 'center' },
-  lrcLine: { fontSize: 14, color: '#8e8e93', paddingVertical: 3, textAlign: 'center' },
-  lrcActive: { color: '#007aff', fontWeight: '700' },
-  lrcEmpty: { color: '#8e8e93', fontSize: 13, textAlign: 'center', marginTop: 16 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 16, gap: 8 },
-  time: { fontSize: 11, color: '#8e8e93', fontVariant: ['tabular-nums'] },
-  progressTrack: { flex: 1, height: 4, borderRadius: 2, backgroundColor: '#e5e5ea', overflow: 'hidden' },
-  progressFill: { height: 4, backgroundColor: '#007aff' },
-  controls: { flexDirection: 'row', alignItems: 'center', marginTop: 18, gap: 28 },
+  container: { flex: 1, backgroundColor: '#F5F6F8' },
+  header: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 2 },
+  headerTitle: { fontSize: 30, fontWeight: '700', color: '#1F2329' },
+  content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30, alignItems: 'center' },
+  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F6F8' },
+  emptyNote: { fontSize: 56, color: '#DDE3E9' },
+  emptyTitle: { fontSize: 17, color: '#5B6066', fontWeight: '600', marginTop: 10 },
+  emptyHint: { fontSize: 13, color: '#B4B9C0', marginTop: 6 },
+  cover: {
+    width: 236,
+    height: 236,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#0A2540',
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  coverPlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#DFF5EC' },
+  coverNote: { fontSize: 72, color: '#00B578', opacity: 0.35 },
+  title: { fontSize: 19, fontWeight: '700', color: '#1F2329', marginTop: 18, maxWidth: '100%' },
+  singer: { fontSize: 13, color: '#8A9099', marginTop: 5 },
+  lyricCard: {
+    width: '100%',
+    height: 240,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    marginTop: 18,
+    overflow: 'hidden',
+    shadowColor: '#0A2540',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  lrcScroll: { flex: 1, paddingVertical: 6 },
+  lyricLoading: { marginTop: 26 },
+  lrcLine: {
+    height: LINE_H,
+    lineHeight: LINE_H,
+    fontSize: 14,
+    color: '#8A9099',
+    textAlign: 'center',
+    paddingHorizontal: 16,
+  },
+  lrcActive: { color: '#00B578', fontWeight: '700', fontSize: 15 },
+  lrcEmpty: { color: '#B4B9C0', fontSize: 13, textAlign: 'center', marginTop: 24 },
+  progressRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 18, gap: 8 },
+  time: { fontSize: 11, color: '#B4B9C0', fontVariant: ['tabular-nums'] },
+  progressTrack: { flex: 1, height: 4, borderRadius: 2, backgroundColor: '#EDEFF2', overflow: 'hidden' },
+  progressFill: { height: 4, borderRadius: 2, backgroundColor: '#00B578' },
+  controls: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 34 },
   ctrlBtn: { padding: 8 },
-  ctrlIcon: { fontSize: 26, color: '#007aff' },
-  playBtn: { backgroundColor: '#007aff', borderRadius: 32, width: 56, height: 56, alignItems: 'center', justifyContent: 'center' },
-  playIcon: { fontSize: 22, color: '#fff' },
-  errorBox: { marginTop: 20, alignItems: 'center', padding: 12, backgroundColor: '#fff5f5', borderRadius: 8, width: '100%' },
-  errorText: { color: '#d70015', fontSize: 13, textAlign: 'center' },
-  external: { color: '#007aff', fontSize: 13, marginTop: 8, textDecorationLine: 'underline' },
+  ctrlIcon: { fontSize: 22, color: '#00B578' },
+  playBtn: {
+    backgroundColor: '#00B578',
+    borderRadius: 30,
+    width: 60,
+    height: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#00B578',
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  playIcon: { fontSize: 24, color: '#fff' },
+  errorBox: {
+    marginTop: 20,
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#FFF1F0',
+    borderRadius: 14,
+    width: '100%',
+  },
+  errorText: { color: '#F53F3F', fontSize: 12, textAlign: 'center', lineHeight: 17 },
+  external: { color: '#00B578', fontSize: 13, marginTop: 8, textDecorationLine: 'underline' },
 });
