@@ -6,7 +6,6 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Modal,
   Pressable,
   StyleSheet,
@@ -17,6 +16,7 @@ import {
 import { searchAll } from '../searchSources';
 import { usePlayer } from '../player/PlayerContext';
 import { useLibrary } from '../library';
+import SongArt from '../components/SongArt';
 import type { LxMusicApi } from '../lx-api/index.js';
 import type { Song } from '../types';
 
@@ -32,13 +32,7 @@ function SongCard({
   return (
     <View style={styles.card}>
       <Pressable style={styles.cardMainPress} onPress={onPlay}>
-        {song.pic ? (
-          <Image source={{ uri: song.pic }} style={styles.thumb} />
-        ) : (
-          <View style={[styles.thumb, styles.thumbEmpty]}>
-            <Text style={styles.thumbNote}>♪</Text>
-          </View>
-        )}
+        <SongArt song={song} size={46} radius={10} />
         <View style={styles.cardMain}>
           <Text style={styles.cardTitle} numberOfLines={1}>
             {song.name}
@@ -275,9 +269,6 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardMainPress: { flex: 1, flexDirection: 'row', alignItems: 'center' },
-  thumb: { width: 46, height: 46, borderRadius: 10, backgroundColor: '#F0F2F5' },
-  thumbEmpty: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#E6F7F0' },
-  thumbNote: { fontSize: 20, color: '#00B578' },
   cardMain: { flex: 1, paddingHorizontal: 12 },
   cardTitle: { fontSize: 15, color: '#1F2329', fontWeight: '500' },
   cardSubtitle: { fontSize: 12, color: '#8A9099', marginTop: 3 },

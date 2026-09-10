@@ -35,4 +35,8 @@ export const KEYS = {
   favs: 'lx.favs',
   stats: 'lx.stats',
   sources: 'lx.sources',
+  /** 上次使用的音源 id（启动自动加载） */
+  lastSource: 'lx.lastSource',
+  /** 上次播放的歌曲 + 进度（启动自动续播） */
+  lastPlay: 'lx.lastPlay',
 } as const;

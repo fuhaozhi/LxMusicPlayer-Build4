@@ -40,9 +40,29 @@ function Main() {
   const insets = useSafeAreaInsets();
   const manager = useSourceManager();
   const { deletePlaylist } = useLibrary();
-  const { state } = usePlayer();
+  const { state, restoreLast } = usePlayer();
   const [tab, setTab] = React.useState<Tab>('home');
   const [overlay, setOverlay] = React.useState<Overlay | null>(null);
+  const restoredRef = React.useRef(false);
+
+  // 启动：自动加载上次使用的音源（无需每次手动点）
+  React.useEffect(() => {
+    const lastId = manager.getLastSourceId();
+    if (lastId) {
+      void manager.loadSource(lastId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 音源加载成功后：自动恢复上次播放的歌曲（含进度续播）
+  React.useEffect(() => {
+    if (restoredRef.current) return;
+    const api = manager.getApi();
+    if (api) {
+      restoredRef.current = true;
+      void restoreLast(api);
+    }
+  }, [manager.loading, manager.currentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const close = () => setOverlay(null);
 

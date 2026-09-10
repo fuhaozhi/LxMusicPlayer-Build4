@@ -5,7 +5,6 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -14,19 +13,14 @@ import {
 import { fetchCollectionSongs } from '../discover';
 import { usePlayer } from '../player/PlayerContext';
 import { useLibrary } from '../library';
+import SongArt from '../components/SongArt';
 import type { LxMusicApi } from '../lx-api/index.js';
 import type { Collection, LocalPlaylist, Song } from '../types';
 
 function Row({ song, onPlay }: { song: Song; onPlay: () => void }) {
   return (
     <Pressable style={styles.row} onPress={onPlay}>
-      {song.pic ? (
-        <Image source={{ uri: song.pic }} style={styles.thumb} />
-      ) : (
-        <View style={[styles.thumb, styles.thumbEmpty]}>
-          <Text style={styles.thumbNote}>♪</Text>
-        </View>
-      )}
+      <SongArt song={song} size={46} radius={10} />
       <View style={styles.rowMain}>
         <Text style={styles.rowName} numberOfLines={1}>
           {song.name}
@@ -187,9 +181,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  thumb: { width: 44, height: 44, borderRadius: 9, backgroundColor: '#F0F2F5' },
-  thumbEmpty: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#E6F7F0' },
-  thumbNote: { fontSize: 18, color: '#00B578' },
   rowMain: { flex: 1, paddingHorizontal: 12 },
   rowName: { fontSize: 14, color: '#1F2329', fontWeight: '500' },
   rowSinger: { fontSize: 11, color: '#8A9099', marginTop: 3 },

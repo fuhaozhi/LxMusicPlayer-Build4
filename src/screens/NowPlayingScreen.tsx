@@ -3,11 +3,13 @@
  * 浅色清新风：大封面卡片 + 歌词自动滚动 + 圆角控制
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { formatTime, parseLrc, currentLrcIndex } from '../player/lrc';
 import { usePlayer } from '../player/PlayerContext';
 import { lyricText, toMusicInfo } from '../sourceManager';
 import { useSourceManager } from '../sourceManager';
+import { fetchLyricByName } from '../lyricFallback';
+import SongArt from '../components/SongArt';
 import type { LyricInfo } from '../lx-api/types.js';
 
 const LINE_H = 30;
@@ -26,28 +28,33 @@ export default function NowPlayingScreen({
 
   const song = state.song;
 
-  // 播放中的歌曲变化时，用当前音源脚本拉歌词
+  // 播放中的歌曲变化时拉歌词：优先音源脚本（有 lyric 能力时），否则用网易云兜底
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     setLyric(null);
     if (!song) return;
     const api = manager.getApi();
-    if (!api) return;
     let cancelled = false;
     setLyricLoading(true);
-    const cap = api.getSource(song.source);
-    if (!cap || !cap.actions.includes('lyric')) {
-      setLyricLoading(false);
-      return;
-    }
-    api
-      .getLyric(song.source, toMusicInfo(song))
-      .then(info => {
-        if (!cancelled) setLyric(info);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) setLyricLoading(false);
-      });
+    const run = async () => {
+      const cap = api ? api.getSource(song.source) : null;
+      if (api && cap && cap.actions.includes('lyric')) {
+        try {
+          const info = await api.getLyric(song.source, toMusicInfo(song));
+          if (!cancelled && info) {
+            setLyric(info);
+            return;
+          }
+        } catch {
+          /* 脚本歌词失败则走兜底 */
+        }
+      }
+      const info = await fetchLyricByName(song);
+      if (!cancelled) setLyric(info);
+    };
+    run().finally(() => {
+      if (!cancelled) setLyricLoading(false);
+    });
     return () => {
       cancelled = true;
     };
@@ -88,13 +95,9 @@ export default function NowPlayingScreen({
         <Text style={styles.headerTitle}>正在播放</Text>
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {song.pic ? (
-          <Image source={{ uri: song.pic }} style={styles.cover} resizeMode="cover" />
-        ) : (
-          <View style={[styles.cover, styles.coverPlaceholder]}>
-            <Text style={styles.coverNote}>♪</Text>
-          </View>
-        )}
+        <View style={styles.coverShadow}>
+          <SongArt song={song} size={236} radius={22} />
+        </View>
         <Text style={styles.title} numberOfLines={1}>
           {song.name}
         </Text>
@@ -191,19 +194,13 @@ const styles = StyleSheet.create({
   emptyNote: { fontSize: 56, color: '#DDE3E9' },
   emptyTitle: { fontSize: 17, color: '#5B6066', fontWeight: '600', marginTop: 10 },
   emptyHint: { fontSize: 13, color: '#B4B9C0', marginTop: 6 },
-  cover: {
-    width: 236,
-    height: 236,
-    borderRadius: 22,
-    backgroundColor: '#FFFFFF',
+  coverShadow: {
     shadowColor: '#0A2540',
     shadowOpacity: 0.1,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
     elevation: 4,
   },
-  coverPlaceholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#DFF5EC' },
-  coverNote: { fontSize: 72, color: '#00B578', opacity: 0.35 },
   title: { fontSize: 19, fontWeight: '700', color: '#1F2329', marginTop: 18, maxWidth: '100%' },
   singer: { fontSize: 13, color: '#8A9099', marginTop: 5 },
   lyricCard: {

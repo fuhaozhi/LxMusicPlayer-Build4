@@ -31,6 +31,8 @@ export interface SourceManager {
   addSource: (url: string, name?: string) => { ok: boolean; error?: string };
   /** 删除音源（若为当前音源则清空） */
   removeSource: (id: string) => void;
+  /** 上次使用的音源 id（仍存在于已添加列表时返回），供启动自动加载 */
+  getLastSourceId: () => string | null;
 }
 
 let cachedApi: LxMusicApi | null = null;
@@ -57,7 +59,8 @@ export function useSourceManager(): SourceManager {
   const [sources, setSources] = useState<SourceState[]>(() =>
     readPersisted().map(s => ({ id: s.id, name: s.name, url: s.url, state: 'idle' })),
   );
-  const [currentId, setCurrentId] = useState<string | null>(null);
+  // 上次使用的音源（持久化，App 启动时自动恢复加载）
+  const [currentId, setCurrentId] = useState<string | null>(() => load<string | null>(KEYS.lastSource, null));
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -106,6 +109,7 @@ export function useSourceManager(): SourceManager {
         capabilities: caps.map(c => ({ source: c.source, actions: c.actions, qualitys: c.qualitys })),
       });
       setCurrentId(id);
+      save(KEYS.lastSource, id);
     } catch (e: any) {
       patch(id, { state: 'error', message: String(e?.message ?? e) });
       setMessage(`音源加载失败：${e?.message ?? e}（外部服务可能失效，可换音源重试）`);
@@ -139,10 +143,19 @@ export function useSourceManager(): SourceManager {
     const next = sources.filter(s => s.id !== id);
     setSources(next);
     persist(next);
-    if (currentId === id) setCurrentId(null);
+    if (currentId === id) {
+      setCurrentId(null);
+      save(KEYS.lastSource, null);
+    }
   };
 
-  return { sources, currentId, loading, message, loadSource, getApi: () => cachedApi, addSource, removeSource };
+  /** 上次使用的音源 id（仅当仍存在于已添加列表时返回），供 App 启动自动加载 */
+  const getLastSourceId = (): string | null => {
+    const lastId = load<string | null>(KEYS.lastSource, null);
+    return lastId && sources.some(s => s.id === lastId) ? lastId : null;
+  };
+
+  return { sources, currentId, loading, message, loadSource, getApi: () => cachedApi, addSource, removeSource, getLastSourceId };
 }
 
 /** 从歌词对象中取文本字段（兼容脚本返回 null 的情况） */

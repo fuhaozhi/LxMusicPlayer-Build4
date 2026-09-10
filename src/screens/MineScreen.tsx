@@ -3,7 +3,6 @@
  */
 import React, { useState } from 'react';
 import {
-  Image,
   Modal,
   Pressable,
   ScrollView,
@@ -14,6 +13,7 @@ import {
 } from 'react-native';
 import { usePlayer } from '../player/PlayerContext';
 import { useLibrary } from '../library';
+import SongArt from '../components/SongArt';
 import type { LxMusicApi } from '../lx-api/index.js';
 import type { Collection, LocalPlaylist, Song } from '../types';
 
@@ -27,13 +27,7 @@ function fmtDuration(seconds: number): string {
 function RecentsRow({ song, onPlay }: { song: Song; onPlay: () => void }) {
   return (
     <Pressable style={styles.recentRow} onPress={onPlay}>
-      {song.pic ? (
-        <Image source={{ uri: song.pic }} style={styles.recentThumb} />
-      ) : (
-        <View style={[styles.recentThumb, styles.recentThumbEmpty]}>
-          <Text style={styles.recentThumbNote}>♪</Text>
-        </View>
-      )}
+      <SongArt song={song} size={46} radius={10} />
       <View style={styles.recentMain}>
         <Text style={styles.recentName} numberOfLines={1}>
           {song.name}
@@ -259,9 +253,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
   },
-  recentThumb: { width: 42, height: 42, borderRadius: 9, backgroundColor: '#F0F2F5' },
-  recentThumbEmpty: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#E6F7F0' },
-  recentThumbNote: { fontSize: 18, color: '#00B578' },
   recentMain: { flex: 1, paddingHorizontal: 12 },
   recentName: { fontSize: 14, color: '#1F2329', fontWeight: '500' },
   recentSinger: { fontSize: 11, color: '#8A9099', marginTop: 3 },

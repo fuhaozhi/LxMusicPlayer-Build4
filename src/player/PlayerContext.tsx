@@ -9,6 +9,7 @@ import type { LxMusicApi } from '../lx-api/index.js';
 import type { PlayerState, Song } from '../types';
 import { toMusicInfo } from '../sourceManager';
 import { useLibrary } from '../library';
+import { KEYS, load, save } from '../storage';
 import { formatTime } from './lrc';
 
 interface PlayerContextValue {
@@ -19,6 +20,8 @@ interface PlayerContextValue {
   next: () => void;
   prev: () => void;
   setCurrentTime: (t: number) => void;
+  /** 恢复上次播放（App 启动、音源加载完成后调用） */
+  restoreLast: (api: LxMusicApi | null) => Promise<void>;
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
@@ -30,6 +33,13 @@ export function usePlayer(): PlayerContextValue {
 }
 
 const QUALITY_FALLBACK = ['320k', '128k'] as const;
+
+/** 上次播放的持久化结构 */
+interface LastPlay {
+  song: Song;
+  currentTime: number;
+  ts: number;
+}
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const library = useLibrary();
@@ -46,6 +56,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const apiRef = useRef<LxMusicApi | null>(null);
   const queueRef = useRef<Song[]>([]);
   const indexRef = useRef(-1);
+  const videoRef = useRef<any>(null);
+  /** 待 seek 的进度（续播用，onLoad 后执行） */
+  const pendingSeekRef = useRef<number | null>(null);
+  /** 进度写盘节流 */
+  const lastPersistRef = useRef(0);
+
+  const persistPlay = (song: Song, currentTime: number) => {
+    const last: LastPlay = { song, currentTime, ts: Date.now() };
+    save(KEYS.lastPlay, last);
+  };
 
   const playIndex = async (index: number, queueList: Song[], api: LxMusicApi | null) => {
     const song = queueList[index];
@@ -67,11 +87,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     const info = toMusicInfo(song);
     if (!api) {
+      pendingSeekRef.current = null;
       setState(prev => ({ ...prev, paused: true, buffering: false, error: '尚未加载音源脚本，请先到「音源」页加载' }));
       return;
     }
     const cap = api.getSource(song.source);
     if (!cap || !cap.actions.includes('musicUrl')) {
+      pendingSeekRef.current = null;
       setState(prev => ({
         ...prev,
         paused: true,
@@ -88,6 +110,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           setState(prev => ({ ...prev, url: res.url, paused: false, buffering: false, error: null }));
           library.bumpPlay(song);
           library.addRecent(song);
+          persistPlay(song, 0);
           return;
         }
       } catch (e) {
@@ -100,11 +123,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       buffering: false,
       error: `取播放地址失败：${lastError?.message ?? lastError}（外部服务可能失效）`,
     }));
+    pendingSeekRef.current = null;
   };
 
   const play: PlayerContextValue['play'] = async (song, api, queueList = [song]) => {
     const idx = queueList.findIndex(s => s === song || (s.source === song.source && s.id === song.id));
     await playIndex(idx >= 0 ? idx : 0, queueList, api);
+  };
+
+  /** 恢复上次播放：有缓存且当前未在播放时，用当前音源重新取链并续播 */
+  const restoreLast: PlayerContextValue['restoreLast'] = async api => {
+    if (state.song) return; // 已有播放则不打扰
+    const last = load<LastPlay | null>(KEYS.lastPlay, null);
+    if (!last?.song) return;
+    pendingSeekRef.current = Math.max(0, Number(last.currentTime) || 0);
+    await play(last.song, api);
+    if (pendingSeekRef.current === 0) pendingSeekRef.current = null;
   };
 
   const toggle = () => setState(prev => ({ ...prev, paused: !prev.paused }));
@@ -122,17 +156,42 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <PlayerContext.Provider value={{ state, queue, play, toggle, next, prev, setCurrentTime: t => setState(prev => ({ ...prev, currentTime: t })) }}>
+    <PlayerContext.Provider
+      value={{ state, queue, play, toggle, next, prev, setCurrentTime: t => setState(prev => ({ ...prev, currentTime: t })), restoreLast }}
+    >
       {children}
       {state.url ? (
         <Video
+          ref={videoRef}
           source={{ uri: state.url }}
           paused={state.paused}
           playInBackground
           playWhenInactive
           ignoreSilentSwitch="ignore"
-          onLoad={({ duration }) => setState(prev => ({ ...prev, duration }))}
-          onProgress={({ currentTime }) => setState(prev => ({ ...prev, currentTime }))}
+          onLoad={({ duration }) => {
+            setState(prev => ({ ...prev, duration }));
+            // 续播：加载完成后 seek 到上次进度（接近结尾则从头播）
+            const seekTo = pendingSeekRef.current;
+            if (seekTo != null) {
+              pendingSeekRef.current = null;
+              const target = seekTo > 0 && duration > 0 && seekTo < duration - 5 ? seekTo : 0;
+              if (target > 0) {
+                try {
+                  videoRef.current?.seek(target);
+                } catch { /* 个别引擎不支持 seek 时忽略 */ }
+              }
+              setState(prev => ({ ...prev, currentTime: target }));
+            }
+          }}
+          onProgress={({ currentTime }) => {
+            setState(prev => ({ ...prev, currentTime }));
+            // 节流：每 10 秒把进度写入缓存（下次打开自动续播）
+            const now = Date.now();
+            if (state.song && now - lastPersistRef.current > 10_000) {
+              lastPersistRef.current = now;
+              persistPlay(state.song, currentTime);
+            }
+          }}
           onEnd={() => {
             library.bumpSeconds(state.duration);
             next();

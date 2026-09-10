@@ -2,8 +2,9 @@
  * 迷你播放条 —— 底部 Tab 上方常驻，展示当前播放歌曲，点击进入全屏播放页。
  */
 import React from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { usePlayer } from './PlayerContext';
+import SongArt from '../components/SongArt';
 
 export default function PlayerBar({ onOpen }: { onOpen: () => void }) {
   const { state, toggle } = usePlayer();
@@ -12,13 +13,7 @@ export default function PlayerBar({ onOpen }: { onOpen: () => void }) {
 
   return (
     <Pressable style={styles.bar} onPress={onOpen}>
-      {song.pic ? (
-        <Image source={{ uri: song.pic }} style={styles.thumb} />
-      ) : (
-        <View style={[styles.thumb, styles.thumbEmpty]}>
-          <Text style={styles.thumbNote}>♪</Text>
-        </View>
-      )}
+      <SongArt song={song} size={40} radius={10} />
       <View style={styles.main}>
         <Text style={styles.name} numberOfLines={1}>
           {song.name}
@@ -58,8 +53,6 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   thumb: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F0F2F5' },
-  thumbEmpty: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#E6F7F0' },
-  thumbNote: { fontSize: 17, color: '#00B578' },
   main: { flex: 1, paddingHorizontal: 10, minWidth: 0 },
   name: { fontSize: 14, color: '#1F2329', fontWeight: '600' },
   singer: { fontSize: 11, color: '#8A9099', marginTop: 2 },
