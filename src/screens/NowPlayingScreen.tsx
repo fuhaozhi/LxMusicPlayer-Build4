@@ -3,7 +3,7 @@
  * 浅色清新风：大封面卡片 + 歌词自动滚动 + 圆角控制
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { ActivityIndicator, Linking, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { formatTime, parseLrc, currentLrcIndex } from '../player/lrc';
 import { usePlayer } from '../player/PlayerContext';
 import { lyricText, toMusicInfo } from '../sourceManager';
@@ -21,10 +21,35 @@ export default function NowPlayingScreen({
   manager: ReturnType<typeof useSourceManager>;
   onBack: () => void;
 }) {
-  const { state, toggle, next, prev } = usePlayer();
+  const { state, toggle, next, prev, seekTo } = usePlayer();
   const [lyric, setLyric] = useState<LyricInfo | null>(null);
   const [lyricLoading, setLyricLoading] = useState(false);
   const lrcRef = useRef<ScrollViewInstance>(null);
+
+  // ---- 进度条拖动 seek ----
+  const trackRef = useRef<any>(null);
+  const trackLayoutRef = useRef({ x: 0, width: 0 });
+  const durationRef = useRef(0);
+  durationRef.current = state.duration;
+  const seekToRef = useRef(seekTo);
+  seekToRef.current = seekTo;
+
+  const handleSeekGesture = (moveX: number) => {
+    const { x, width } = trackLayoutRef.current;
+    const duration = durationRef.current;
+    if (!width || !duration) return;
+    const ratio = Math.min(1, Math.max(0, (moveX - x) / width));
+    seekToRef.current(ratio * duration);
+  };
+
+  const pan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (_e, g) => handleSeekGesture(g.moveX),
+      onPanResponderMove: (_e, g) => handleSeekGesture(g.moveX),
+    }),
+  ).current;
 
   const song = state.song;
 
@@ -131,15 +156,34 @@ export default function NowPlayingScreen({
           )}
         </View>
 
-        {/* 进度 */}
+        {/* 进度（可拖动/点击跳转） */}
         <View style={styles.progressRow}>
           <Text style={styles.time}>{formatTime(state.currentTime)}</Text>
-          <View style={styles.progressTrack}>
+          <View
+            ref={trackRef}
+            style={styles.progressTrack}
+            onLayout={() => {
+              trackRef.current?.measureInWindow((mx: number, _my: number, w: number) => {
+                trackLayoutRef.current = { x: mx, width: w };
+              });
+            }}
+            {...pan.panHandlers}
+          >
             <View
               style={[
                 styles.progressFill,
                 {
                   width: `${
+                    state.duration > 0 ? Math.min(100, (state.currentTime / state.duration) * 100) : 0
+                  }%` as any,
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.progressThumb,
+                {
+                  left: `${
                     state.duration > 0 ? Math.min(100, (state.currentTime / state.duration) * 100) : 0
                   }%` as any,
                 },
@@ -230,8 +274,22 @@ const styles = StyleSheet.create({
   lrcEmpty: { color: '#B4B9C0', fontSize: 13, textAlign: 'center', marginTop: 24 },
   progressRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 18, gap: 8 },
   time: { fontSize: 11, color: '#B4B9C0', fontVariant: ['tabular-nums'] },
-  progressTrack: { flex: 1, height: 4, borderRadius: 2, backgroundColor: '#EDEFF2', overflow: 'hidden' },
+  progressTrack: {
+    flex: 1,
+    height: 18,
+    justifyContent: 'center',
+    marginHorizontal: 2,
+  },
   progressFill: { height: 4, borderRadius: 2, backgroundColor: '#00B578' },
+  progressThumb: {
+    position: 'absolute',
+    top: 5,
+    width: 8,
+    height: 8,
+    marginLeft: -4,
+    borderRadius: 4,
+    backgroundColor: '#00B578',
+  },
   controls: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 34 },
   ctrlBtn: { padding: 8 },
   ctrlIcon: { fontSize: 22, color: '#00B578' },

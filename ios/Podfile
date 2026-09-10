@@ -23,6 +23,9 @@ target 'LxMusicPlayer' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
+  # 本地原生模块：锁屏「正在播放」卡片 + 远程控制
+  pod 'LxNowPlaying', :path => './LxNowPlaying'
+
   post_install do |installer|
     react_native_post_install(
       installer,

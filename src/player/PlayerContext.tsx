@@ -2,8 +2,11 @@
  * 播放器上下文 —— react-native-video 播放 + 音源脚本取链（lx-ios-api）。
  * 取链策略：当前音源脚本支持该 source 时用脚本取 musicUrl（320k 失败降级 128k）；
  * 不支持时抛明确错误提示换音源。
+ * 附加能力：进度 seek（拖动/锁屏）、锁屏「正在播放」卡片与远程控制（原生 LxNowPlaying）、
+ * 上次播放缓存（自动续播）。
  */
-import React, { createContext, useContext, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { DeviceEventEmitter, NativeModules } from 'react-native';
 import Video from 'react-native-video';
 import type { LxMusicApi } from '../lx-api/index.js';
 import type { PlayerState, Song } from '../types';
@@ -19,6 +22,8 @@ interface PlayerContextValue {
   toggle: () => void;
   next: () => void;
   prev: () => void;
+  /** 跳转到指定秒数（进度条拖动 / 锁屏拖动） */
+  seekTo: (t: number) => void;
   setCurrentTime: (t: number) => void;
   /** 恢复上次播放（App 启动、音源加载完成后调用） */
   restoreLast: (api: LxMusicApi | null) => Promise<void>;
@@ -41,6 +46,10 @@ interface LastPlay {
   ts: number;
 }
 
+const NowPlayingNative = NativeModules?.LxNowPlaying as
+  | { setNowPlaying?: (info: any) => void; clearNowPlaying?: () => void }
+  | undefined;
+
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const library = useLibrary();
   const [state, setState] = useState<PlayerState>({
@@ -61,6 +70,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const pendingSeekRef = useRef<number | null>(null);
   /** 进度写盘节流 */
   const lastPersistRef = useRef(0);
+  /** 锁屏信息更新节流 */
+  const lastLockRef = useRef(0);
 
   const persistPlay = (song: Song, currentTime: number) => {
     const last: LastPlay = { song, currentTime, ts: Date.now() };
@@ -131,16 +142,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     await playIndex(idx >= 0 ? idx : 0, queueList, api);
   };
 
-  /** 恢复上次播放：有缓存且当前未在播放时，用当前音源重新取链并续播 */
-  const restoreLast: PlayerContextValue['restoreLast'] = async api => {
-    if (state.song) return; // 已有播放则不打扰
-    const last = load<LastPlay | null>(KEYS.lastPlay, null);
-    if (!last?.song) return;
-    pendingSeekRef.current = Math.max(0, Number(last.currentTime) || 0);
-    await play(last.song, api);
-    if (pendingSeekRef.current === 0) pendingSeekRef.current = null;
-  };
-
   const toggle = () => setState(prev => ({ ...prev, paused: !prev.paused }));
 
   const next = () => {
@@ -155,9 +156,91 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const seekTo: PlayerContextValue['seekTo'] = t => {
+    const target = Math.max(0, Number(t) || 0);
+    setState(prev => ({ ...prev, currentTime: target }));
+    try {
+      videoRef.current?.seek(target);
+    } catch {
+      /* 个别引擎不支持 seek 时忽略 */
+    }
+  };
+
+  /** 恢复上次播放：有缓存且当前未在播放时，用当前音源重新取链并续播 */
+  const restoreLast: PlayerContextValue['restoreLast'] = async api => {
+    if (state.song) return; // 已有播放则不打扰
+    const last = load<LastPlay | null>(KEYS.lastPlay, null);
+    if (!last?.song) return;
+    pendingSeekRef.current = Math.max(0, Number(last.currentTime) || 0);
+    await play(last.song, api);
+    if (pendingSeekRef.current === 0) pendingSeekRef.current = null;
+  };
+
+  // ---- 锁屏「正在播放」：状态变化时同步到原生（封面由原生下载）----
+  useEffect(() => {
+    if (!NowPlayingNative?.setNowPlaying) return;
+    if (!state.song || !state.url) {
+      NowPlayingNative.clearNowPlaying?.();
+      return;
+    }
+    const now = Date.now();
+    // currentTime 节流 5s；暂停/切歌/加载完成立即更新
+    if (now - lastLockRef.current < 5000 && state.currentTime > 0 && !state.paused) return;
+    lastLockRef.current = now;
+    NowPlayingNative.setNowPlaying({
+      title: state.song.name,
+      artist: state.song.singer,
+      album: state.song.album ?? '',
+      artworkUrl: state.song.pic ?? '',
+      duration: state.duration || 0,
+      currentTime: state.currentTime || 0,
+      rate: state.paused ? 0 : 1,
+    });
+  }, [state.song, state.url, state.paused, state.duration, state.currentTime]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- 锁屏远程控制（播放/暂停/下一首/上一首/拖动进度）----
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('LxNowPlayingCommand', (e: any) => {
+      switch (e?.type) {
+        case 'play':
+          setState(prev => ({ ...prev, paused: false }));
+          break;
+        case 'pause':
+          setState(prev => ({ ...prev, paused: true }));
+          break;
+        case 'toggle':
+          toggle();
+          break;
+        case 'next':
+          next();
+          break;
+        case 'prev':
+          prev();
+          break;
+        case 'seek':
+          seekTo(Number(e.position) || 0);
+          break;
+        default:
+          break;
+      }
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <PlayerContext.Provider
-      value={{ state, queue, play, toggle, next, prev, setCurrentTime: t => setState(prev => ({ ...prev, currentTime: t })), restoreLast }}
+      value={{
+        state,
+        queue,
+        play,
+        toggle,
+        next,
+        prev,
+        seekTo,
+        setCurrentTime: t => setState(prev => ({ ...prev, currentTime: t })),
+        restoreLast,
+      }}
     >
       {children}
       {state.url ? (
@@ -171,14 +254,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           onLoad={({ duration }) => {
             setState(prev => ({ ...prev, duration }));
             // 续播：加载完成后 seek 到上次进度（接近结尾则从头播）
-            const seekTo = pendingSeekRef.current;
-            if (seekTo != null) {
+            const seekToTime = pendingSeekRef.current;
+            if (seekToTime != null) {
               pendingSeekRef.current = null;
-              const target = seekTo > 0 && duration > 0 && seekTo < duration - 5 ? seekTo : 0;
+              const target = seekToTime > 0 && duration > 0 && seekToTime < duration - 5 ? seekToTime : 0;
               if (target > 0) {
                 try {
                   videoRef.current?.seek(target);
-                } catch { /* 个别引擎不支持 seek 时忽略 */ }
+                } catch { /* 忽略 */ }
               }
               setState(prev => ({ ...prev, currentTime: target }));
             }
