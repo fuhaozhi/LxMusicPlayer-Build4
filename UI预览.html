@@ -57,7 +57,7 @@
   .report .go { font-size: 22px; color: #C0C6CC; padding-left: 8px; }
   .sec2 { font-size: 18px; font-weight: 700; color: #1F2329; margin: 20px 0 10px; }
   .recent { display: flex; align-items: center; background: #fff; border-radius: 14px; padding: 9px; margin-bottom: 8px; box-shadow: 0 2px 8px rgba(10,37,64,.04); cursor: pointer; }
-  .rthumb { width: 42px; height: 42px; border-radius: 9px; background: #E6F7F0; display: flex; align-items: center; justify-content: center; color: #00B578; font-size: 17px; }
+  .rthumb { width: 42px; height: 42px; border-radius: 9px; background: #F0F2F5; display: flex; align-items: center; justify-content: center; color: #B4B9C0; font-size: 17px; }
   .rmain { flex: 1; padding: 0 12px; min-width: 0; }
   .rname { font-size: 14px; font-weight: 500; color: #1F2329; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .rsinger { font-size: 11px; color: #8A9099; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -107,7 +107,7 @@
 
   /* 迷你播放条 + tab */
   .playerbar { display: flex; align-items: center; background: #fff; border-radius: 16px; margin: 0 12px 6px; padding: 8px; box-shadow: 0 4px 12px rgba(10,37,64,.08); }
-  .pthumb { width: 40px; height: 40px; border-radius: 10px; background: #E6F7F0; display: flex; align-items: center; justify-content: center; color: #00B578; font-size: 17px; }
+  .pthumb { width: 40px; height: 40px; border-radius: 10px; background: #F0F2F5; display: flex; align-items: center; justify-content: center; color: #B4B9C0; font-size: 17px; }
   .pmain { flex: 1; padding: 0 10px; min-width: 0; }
   .pname { font-size: 14px; font-weight: 600; color: #1F2329; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .psinger { font-size: 11px; color: #8A9099; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -180,8 +180,8 @@
           <div class="go">›</div>
         </div>
         <div class="sec2">最近播放</div>
-        <div class="recent" onclick="toast('播放：晴天')"><div class="rthumb">♪</div><div class="rmain"><div class="rname">晴天</div><div class="rsinger">周杰伦 · 叶惠美</div></div><div class="rplay">▶</div></div>
-        <div class="recent" onclick="toast('播放：稻香')"><div class="rthumb">♪</div><div class="rmain"><div class="rname">稻香</div><div class="rsinger">周杰伦 · 魔杰座</div></div><div class="rplay">▶</div></div>
+        <div class="recent" onclick="toast('播放：晴天')"><div class="rthumb" style="background-image:url('https://y.gtimg.cn/music/photo_new/T002R300x300M000000MkMni19ClKG.jpg');background-size:cover;background-position:center"></div><div class="rmain"><div class="rname">晴天</div><div class="rsinger">周杰伦 · 叶惠美</div></div><div class="rplay">▶</div></div>
+        <div class="recent" onclick="toast('播放：稻香')"><div class="rthumb" style="background-image:url('https://y.gtimg.cn/music/photo_new/T002R300x300M000002Neh8l0uciQZ.jpg');background-size:cover;background-position:center"></div><div class="rmain"><div class="rname">稻香</div><div class="rsinger">周杰伦 · 魔杰座</div></div><div class="rplay">▶</div></div>
         <div class="sec2">自建歌单</div>
         <div class="hscroll">
           <div class="hcard"><div class="create" onclick="toast('新建歌单')"><span class="plus">＋</span><span class="t">新建歌单</span></div></div>
@@ -241,7 +241,7 @@
     </div>
 
     <div class="playerbar" onclick="toast('进入播放页')">
-      <div class="pthumb">♪</div>
+      <div class="pthumb" style="background-image:url('https://y.gtimg.cn/music/photo_new/T002R300x300M000000MkMni19ClKG.jpg');background-size:cover;background-position:center"></div>
       <div class="pmain"><div class="pname">晴天</div><div class="psinger">周杰伦</div></div>
       <div class="ptoggle" onclick="event.stopPropagation();toast('暂停/播放')">❚❚</div>
       <div class="pgo">›</div>
@@ -261,6 +261,7 @@
     <div class="cl-item">· 本地缓存播放进度，下次打开自动从上次位置继续播放</div>
     <div class="cl-item">· 播放页进度条可拖动 / 点击跳转</div>
     <div class="cl-item">· 锁屏与控制中心显示「正在播放」卡片，支持暂停 / 切歌 / 拖进度</div>
+    <div class="cl-item">· 封面统一 fetch 下载显示真实专辑图，缺失时中性浅灰占位</div>
   </div>
 
   <div class="tips">预览为示意效果（示例歌曲/数据），实际内容以搜索、音源脚本与合集接口返回为准</div>
