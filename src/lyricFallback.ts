@@ -1,8 +1,8 @@
 /**
  * 歌词兜底 —— 当前可用音源脚本（huibq/qdy/ikun）只提供 musicUrl 能力、不提供 lyric，
  * 播放页在音源脚本无歌词能力（或拉取失败）时自动补歌词：
- * 1) 优先腾讯音乐：搜索拿 songmid → 歌词接口（实测可用，LRC 完整）
- * 2) 失败则用网易云：搜索多首，依次取第一首有歌词的
+ * 1) 优先网易云：搜索多首，依次取第一首有歌词的（接口不依赖 Referer，iOS 可用）
+ * 2) 失败则用腾讯音乐（歌词接口需要 Referer，iOS 原生层会忽略自定义头，仅作后备）
  * 失败静默返回 null，不阻塞播放。
  */
 import type { Song } from './types';
@@ -94,13 +94,13 @@ export async function fetchLyricByName(song: Song): Promise<LyricInfo | null> {
   if (cache.has(key)) return cache.get(key) ?? null;
   let info: LyricInfo | null = null;
   try {
-    info = await tryTencent(song);
+    info = await tryNetease(song);
   } catch {
     info = null;
   }
   if (!info) {
     try {
-      info = await tryNetease(song);
+      info = await tryTencent(song);
     } catch {
       info = null;
     }

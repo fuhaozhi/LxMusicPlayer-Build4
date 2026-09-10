@@ -68,6 +68,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const videoRef = useRef<any>(null);
   /** 待 seek 的进度（续播用，onLoad 后执行） */
   const pendingSeekRef = useRef<number | null>(null);
+  /** 上次 seek 时间戳（防抖：seek 后短暂忽略 onProgress 回跳） */
+  const seekAtRef = useRef(0);
   /** 进度写盘节流 */
   const lastPersistRef = useRef(0);
   /** 锁屏信息更新节流 */
@@ -158,6 +160,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const seekTo: PlayerContextValue['seekTo'] = t => {
     const target = Math.max(0, Number(t) || 0);
+    seekAtRef.current = Date.now();
     setState(prev => ({ ...prev, currentTime: target }));
     try {
       videoRef.current?.seek(target);
@@ -258,6 +261,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             if (seekToTime != null) {
               pendingSeekRef.current = null;
               const target = seekToTime > 0 && duration > 0 && seekToTime < duration - 5 ? seekToTime : 0;
+              seekAtRef.current = Date.now();
               if (target > 0) {
                 try {
                   videoRef.current?.seek(target);
@@ -267,6 +271,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             }
           }}
           onProgress={({ currentTime }) => {
+            // seek 后 1.5s 内忽略原生回跳，避免进度条乱跳
+            if (Date.now() - seekAtRef.current < 1500) return;
             setState(prev => ({ ...prev, currentTime }));
             // 节流：每 10 秒把进度写入缓存（下次打开自动续播）
             const now = Date.now();
@@ -277,7 +283,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           }}
           onEnd={() => {
             library.bumpSeconds(state.duration);
-            next();
+            const list = queueRef.current;
+            if (list.length > 0) {
+              // 正常下一首；队列末尾则循环回第一首（避免播完卡住）
+              if (indexRef.current < list.length - 1) {
+                void playIndex(indexRef.current + 1, list, apiRef.current);
+              } else {
+                void playIndex(0, list, apiRef.current);
+              }
+            }
           }}
           onBuffer={({ isBuffering }) => setState(prev => ({ ...prev, buffering: isBuffering }))}
           onError={e => setState(prev => ({ ...prev, paused: true, buffering: false, error: `播放失败：${JSON.stringify(e)}` }))}

@@ -6,6 +6,7 @@
 @implementation LxNowPlaying {
   BOOL audioSessionConfigured;
   BOOL commandsInstalled;
+  BOOL interruptionObserverInstalled;
   NSMutableArray<id> *commandTargets;
 }
 
@@ -22,6 +23,12 @@ RCT_EXPORT_MODULE()
   return self;
 }
 
+- (void)dealloc {
+  if (interruptionObserverInstalled) {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+  }
+}
+
 - (NSArray<NSString *> *)supportedEvents {
   return @[ @"LxNowPlayingCommand" ];
 }
@@ -34,6 +41,32 @@ RCT_EXPORT_MODULE()
                                     withOptions:0
                                           error:&error];
   [[AVAudioSession sharedInstance] setActive:YES error:&error];
+  [self setupInterruptionObserver];
+}
+
+/// 音频中断（来电/其他 App 抢占）结束后自动恢复播放会话并通知 JS 恢复
+- (void)setupInterruptionObserver {
+  if (interruptionObserverInstalled) return;
+  interruptionObserverInstalled = YES;
+  [[NSNotificationCenter defaultCenter]
+      addObserver:self
+         selector:@selector(handleInterruption:)
+             name:AVAudioSessionInterruptionNotification
+           object:[AVAudioSession sharedInstance]];
+}
+
+- (void)handleInterruption:(NSNotification *)note {
+  NSDictionary *info = note.userInfo;
+  NSNumber *type = info[AVAudioSessionInterruptionTypeKey];
+  if (!type) return;
+  if (type.unsignedIntegerValue == AVAudioSessionInterruptionTypeEnded) {
+    NSNumber *opt = info[AVAudioSessionInterruptionOptionKey];
+    if (opt && opt.unsignedIntegerValue == AVAudioSessionInterruptionOptionShouldResume) {
+      NSError *err = nil;
+      [[AVAudioSession sharedInstance] setActive:YES error:&err];
+      [self sendEventWithName:@"LxNowPlayingCommand" body:@{@"type" : @"play"}];
+    }
+  }
 }
 
 RCT_EXPORT_METHOD(setNowPlaying:(NSDictionary *)info) {
@@ -113,6 +146,7 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
   commandsInstalled = YES;
   MPRemoteCommandCenter *center = [MPRemoteCommandCenter sharedCommandCenter];
 
+  center.playCommand.enabled = YES;
   id playTarget = [center.playCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
                         MPRemoteCommandEvent *_Nonnull event) {
@@ -122,6 +156,7 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
       }];
   [commandTargets addObject:playTarget];
 
+  center.pauseCommand.enabled = YES;
   id pauseTarget = [center.pauseCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
                         MPRemoteCommandEvent *_Nonnull event) {
@@ -131,6 +166,7 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
       }];
   [commandTargets addObject:pauseTarget];
 
+  center.togglePlayPauseCommand.enabled = YES;
   id toggleTarget = [center.togglePlayPauseCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
                         MPRemoteCommandEvent *_Nonnull event) {
@@ -140,6 +176,7 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
       }];
   [commandTargets addObject:toggleTarget];
 
+  center.nextTrackCommand.enabled = YES;
   id nextTarget = [center.nextTrackCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
                         MPRemoteCommandEvent *_Nonnull event) {
@@ -149,6 +186,7 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
       }];
   [commandTargets addObject:nextTarget];
 
+  center.previousTrackCommand.enabled = YES;
   id prevTarget = [center.previousTrackCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
                         MPRemoteCommandEvent *_Nonnull event) {
@@ -158,6 +196,8 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
       }];
   [commandTargets addObject:prevTarget];
 
+  // 锁屏拖动进度必须显式启用，否则无效
+  center.changePlaybackPositionCommand.enabled = YES;
   id seekTarget = [center.changePlaybackPositionCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
                         MPRemoteCommandEvent *_Nonnull event) {
