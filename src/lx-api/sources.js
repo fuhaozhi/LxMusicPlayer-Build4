@@ -13,9 +13,11 @@ export const LX_MUSIC_SOURCES = [
     //   flower — 版本检查服务器（97.64.37.235 / js.org / mirror.com）已停运
     //   lx     — 脚本依赖 babel regeneratorRuntime，沙箱不提供
     //   grass/juhe — 初始化超时（外部服务不可达）
-    { id: 'huibq', name: 'Huibq', url: `${RAW}/huibq/latest.js`, acceleratedUrl: `${PROXY}/huibq/latest.js`, note: '酷我/酷狗/腾讯/网易/咪咕 5 源' },
-    { id: 'qdy', name: 'QDY 全豆要聚合', url: `${RAW}/qdy/latest.js`, acceleratedUrl: `${PROXY}/qdy/latest.js`, note: '酷我/酷狗/腾讯/网易/咪咕 5 源' },
-    { id: 'ikun', name: 'ikun', url: `${RAW}/ikun/latest.js`, acceleratedUrl: `${PROXY}/ikun/latest.js`, note: '酷我/网易 2 源' },
+    // 2026-09 复查：huibq 取链服务器 lxmusicapi.onrender.com 返回 503（暂停），暂不可用；
+    //   ikun 网易取链失效（仅酷我可测）。当前推荐 qdy（腾讯/网易实测可取到真实播放地址）。
+    { id: 'qdy', name: 'QDY 全豆要聚合', url: `${RAW}/qdy/latest.js`, acceleratedUrl: `${PROXY}/qdy/latest.js`, note: '酷我/酷狗/腾讯/网易/咪咕 5 源 · 实测可用' },
+    { id: 'huibq', name: 'Huibq', url: `${RAW}/huibq/latest.js`, acceleratedUrl: `${PROXY}/huibq/latest.js`, note: '酷我/酷狗/腾讯/网易/咪咕 5 源 · 服务器已暂停' },
+    { id: 'ikun', name: 'ikun', url: `${RAW}/ikun/latest.js`, acceleratedUrl: `${PROXY}/ikun/latest.js`, note: '酷我/网易 2 源 · 网易取链暂失效' },
 ];
 /** 其他可用的加速前缀（来自 awaw.cc 页面） */
 export const PROXY_PREFIXES = [
