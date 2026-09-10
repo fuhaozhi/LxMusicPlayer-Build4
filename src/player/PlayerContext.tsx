@@ -75,10 +75,69 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const lastPersistRef = useRef(0);
   /** 锁屏信息更新节流 */
   const lastLockRef = useRef(0);
+  /** 预取的下一首播放地址（熄屏/后台切歌用，避免后台现场网络取链被挂起） */
+  const prefetchRef = useRef<{ songKey: string; url: string } | null>(null);
+  const prefetchSeqRef = useRef(0);
+
+  const songKeyOf = (s: Song) => `${s.source}:${s.id}`;
 
   const persistPlay = (song: Song, currentTime: number) => {
     const last: LastPlay = { song, currentTime, ts: Date.now() };
     save(KEYS.lastPlay, last);
+  };
+
+  /** 直接以已知 URL 播放并进入就绪态（前台取链成功 / 预取命中均走这里） */
+  const applySong = (index: number, queueList: Song[], api: LxMusicApi | null, url: string) => {
+    const song = queueList[index];
+    if (!song) return;
+    apiRef.current = api;
+    indexRef.current = index;
+    queueRef.current = queueList;
+    setQueue(queueList);
+    setState(prev => ({
+      ...prev,
+      song,
+      url,
+      paused: false,
+      buffering: false,
+      error: null,
+      currentTime: 0,
+      duration: 0,
+    }));
+    library.bumpPlay(song);
+    library.addRecent(song);
+    persistPlay(song, 0);
+    // 顺带预取下一首，熄屏/后台切歌直接走缓存
+    void prefetchNext(index, queueList, api);
+  };
+
+  /** 预取下一首播放地址（静默失败；队列末尾循环回第一首） */
+  const prefetchNext = async (index: number, queueList: Song[], api: LxMusicApi | null) => {
+    const seq = ++prefetchSeqRef.current;
+    try {
+      if (!api || queueList.length === 0) return;
+      const ni = index < queueList.length - 1 ? index + 1 : 0;
+      const target = queueList[ni];
+      if (!target) return;
+      const cap = api.getSource(target.source);
+      if (!cap || !cap.actions.includes('musicUrl')) return;
+      let url: string | null = null;
+      for (const quality of QUALITY_FALLBACK) {
+        try {
+          const res = await api.getMusicUrl(target.source, toMusicInfo(target), quality);
+          if (res?.url) {
+            url = res.url;
+            break;
+          }
+        } catch {
+          /* 尝试下一档音质 */
+        }
+      }
+      if (seq !== prefetchSeqRef.current) return; // 期间已切歌，丢弃过期结果
+      prefetchRef.current = url ? { songKey: songKeyOf(target), url } : null;
+    } catch {
+      if (seq === prefetchSeqRef.current) prefetchRef.current = null;
+    }
   };
 
   const playIndex = async (index: number, queueList: Song[], api: LxMusicApi | null) => {
@@ -121,10 +180,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       try {
         const res = await api.getMusicUrl(song.source, info, quality);
         if (res?.url) {
-          setState(prev => ({ ...prev, url: res.url, paused: false, buffering: false, error: null }));
-          library.bumpPlay(song);
-          library.addRecent(song);
-          persistPlay(song, 0);
+          applySong(index, queueList, api, res.url);
           return;
         }
       } catch (e) {
@@ -147,16 +203,27 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const toggle = () => setState(prev => ({ ...prev, paused: !prev.paused }));
 
+  /** 下一首：优先用预取 URL（熄屏/后台零网络依赖），队列末尾循环回第一首 */
   const next = () => {
-    if (indexRef.current < queueRef.current.length - 1) {
-      void playIndex(indexRef.current + 1, queueRef.current, apiRef.current);
+    const list = queueRef.current;
+    if (list.length === 0) return;
+    const ni = indexRef.current < list.length - 1 ? indexRef.current + 1 : 0;
+    const target = list[ni];
+    if (!target) return;
+    const pf = prefetchRef.current;
+    if (pf && pf.songKey === songKeyOf(target)) {
+      prefetchRef.current = null;
+      applySong(ni, list, apiRef.current, pf.url);
+      return;
     }
+    void playIndex(ni, list, apiRef.current);
   };
 
   const prev = () => {
-    if (indexRef.current > 0) {
-      void playIndex(indexRef.current - 1, queueRef.current, apiRef.current);
-    }
+    const list = queueRef.current;
+    if (list.length === 0) return;
+    const pi = indexRef.current > 0 ? indexRef.current - 1 : list.length - 1;
+    void playIndex(pi, list, apiRef.current);
   };
 
   const seekTo: PlayerContextValue['seekTo'] = t => {
@@ -291,15 +358,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           }}
           onEnd={() => {
             library.bumpSeconds(state.duration);
-            const list = queueRef.current;
-            if (list.length > 0) {
-              // 正常下一首；队列末尾则循环回第一首（避免播完卡住）
-              if (indexRef.current < list.length - 1) {
-                void playIndex(indexRef.current + 1, list, apiRef.current);
-              } else {
-                void playIndex(0, list, apiRef.current);
-              }
-            }
+            // 走统一 next()：优先预取 URL，后台/熄屏也能自动切下一首；末尾循环
+            next();
           }}
           onBuffer={({ isBuffering }) => setState(prev => ({ ...prev, buffering: isBuffering }))}
           onError={e => setState(prev => ({ ...prev, paused: true, buffering: false, error: `播放失败：${JSON.stringify(e)}` }))}
