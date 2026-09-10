@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LxMusicPlayer 新结构 UI 预览</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif;
+    background: #e9edf2;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 24px 16px 48px;
+  }
+  h1 { font-size: 18px; color: #1F2329; margin-bottom: 6px; }
+  .sub { font-size: 13px; color: #8A9099; margin-bottom: 18px; }
+
+  .phone {
+    width: 390px; background: #F5F6F8; border-radius: 40px; border: 8px solid #1c1e22;
+    box-shadow: 0 20px 50px rgba(10,37,64,.25); overflow: hidden; position: relative;
+  }
+  .status { height: 40px; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; font-size: 12px; font-weight: 600; color: #1F2329; background: #F5F6F8; }
+  .screen { height: 690px; overflow: hidden; position: relative; }
+
+  .page { position: absolute; inset: 0; padding: 10px 16px 0; display: none; flex-direction: column; overflow-y: auto; }
+  .page.active { display: flex; }
+
+  .title { font-size: 26px; font-weight: 800; color: #1F2329; }
+  .subtitle { font-size: 13px; color: #8A9099; margin-top: 4px; }
+
+  /* 主页 */
+  .searchbar { display: flex; align-items: center; background: #fff; border-radius: 14px; padding: 6px 6px 6px 14px; margin-top: 14px; box-shadow: 0 3px 10px rgba(10,37,64,.05); cursor: pointer; }
+  .searchbar .ph { flex: 1; font-size: 15px; color: #B4B9C0; }
+  .searchpill { background: #E6F7F0; border-radius: 10px; padding: 8px 14px; color: #00B578; font-size: 13px; font-weight: 600; }
+  .sec { display: flex; align-items: baseline; justify-content: space-between; margin: 20px 0 12px; }
+  .sec h3 { font-size: 18px; font-weight: 700; color: #1F2329; }
+  .sec span { font-size: 12px; color: #B4B9C0; }
+  .grid { display: flex; flex-wrap: wrap; justify-content: space-between; }
+  .card { width: 48.5%; margin-bottom: 16px; cursor: pointer; }
+  .cover { height: 158px; border-radius: 16px; display: flex; align-items: center; justify-content: center; position: relative; box-shadow: 0 3px 10px rgba(10,37,64,.06); }
+  .cover .note { font-size: 50px; opacity: .45; }
+  .cover .tag { position: absolute; left: 8px; bottom: 8px; font-size: 12px; font-weight: 700; opacity: .9; }
+  .card .cname { font-size: 14px; font-weight: 600; color: #1F2329; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .cdesc { font-size: 11px; color: #B4B9C0; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tip { background: #FFF4E6; border-radius: 12px; padding: 9px 12px; font-size: 12px; color: #B76E00; line-height: 17px; margin-top: 6px; }
+
+  /* 我的 */
+  .me-top { display: flex; align-items: center; margin-bottom: 14px; }
+  .avatar { width: 54px; height: 54px; border-radius: 27px; background: #E6F7F0; display: flex; align-items: center; justify-content: center; color: #00B578; font-size: 24px; }
+  .me-name { font-size: 22px; font-weight: 800; color: #1F2329; margin-left: 12px; }
+  .me-sub { font-size: 12px; color: #8A9099; margin-left: 12px; margin-top: 2px; }
+  .report { display: flex; align-items: center; background: #fff; border-radius: 16px; padding: 14px 12px; box-shadow: 0 3px 10px rgba(10,37,64,.05); cursor: pointer; }
+  .report .it { flex: 1; text-align: center; min-width: 0; }
+  .report .num { font-size: 17px; font-weight: 700; color: #1F2329; }
+  .report .lb { font-size: 11px; color: #B4B9C0; margin-top: 3px; }
+  .report .div { width: 1px; height: 26px; background: #EDEFF2; }
+  .report .go { font-size: 22px; color: #C0C6CC; padding-left: 8px; }
+  .sec2 { font-size: 18px; font-weight: 700; color: #1F2329; margin: 20px 0 10px; }
+  .recent { display: flex; align-items: center; background: #fff; border-radius: 14px; padding: 9px; margin-bottom: 8px; box-shadow: 0 2px 8px rgba(10,37,64,.04); cursor: pointer; }
+  .rthumb { width: 42px; height: 42px; border-radius: 9px; background: #E6F7F0; display: flex; align-items: center; justify-content: center; color: #00B578; font-size: 17px; }
+  .rmain { flex: 1; padding: 0 12px; min-width: 0; }
+  .rname { font-size: 14px; font-weight: 500; color: #1F2329; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rsinger { font-size: 11px; color: #8A9099; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .rplay { width: 32px; height: 32px; border-radius: 16px; background: #E6F7F0; display: flex; align-items: center; justify-content: center; color: #00B578; font-size: 11px; }
+  .hscroll { display: flex; overflow-x: auto; margin: 0 -16px; padding: 0 16px; }
+  .hcard { width: 104px; flex-shrink: 0; margin-right: 12px; }
+  .create { width: 104px; height: 104px; border-radius: 16px; border: 1.5px dashed #C9D4CC; background: #FBFCFC; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #00B578; cursor: pointer; }
+  .create .plus { font-size: 26px; }
+  .create .t { font-size: 12px; color: #8A9099; margin-top: 4px; }
+  .hcover { height: 104px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 32px; opacity: .55; position: relative; box-shadow: 0 2px 8px rgba(10,37,64,.05); }
+  .hcount { position: absolute; left: 8px; bottom: 8px; font-size: 11px; color: #5B6066; opacity: 1; }
+  .hname { font-size: 12px; font-weight: 500; color: #1F2329; margin-top: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 104px; }
+  .empty-t { font-size: 13px; color: #B4B9C0; padding: 4px 0; }
+  .settings-row { display: flex; align-items: center; background: #fff; border-radius: 16px; padding: 14px; margin-top: 20px; box-shadow: 0 3px 10px rgba(10,37,64,.05); cursor: pointer; }
+  .sicon { width: 34px; height: 34px; border-radius: 10px; background: #F0F2F5; display: flex; align-items: center; justify-content: center; font-size: 17px; color: #5B6066; }
+  .stext { flex: 1; font-size: 15px; font-weight: 500; color: #1F2329; padding-left: 12px; }
+  .sgo { font-size: 22px; color: #C0C6CC; }
+
+  /* 设置页 */
+  .back-row { display: flex; align-items: center; margin-bottom: 4px; }
+  .back { font-size: 34px; color: #1F2329; width: 32px; cursor: pointer; line-height: 34px; margin-top: -4px; }
+  .back-title { font-size: 24px; font-weight: 700; color: #1F2329; }
+  .sec-t { font-size: 18px; font-weight: 700; color: #1F2329; margin-top: 18px; }
+  .sec-d { font-size: 12px; color: #8A9099; line-height: 18px; margin: 5px 0 12px; }
+  .src { display: flex; align-items: center; background: #fff; border-radius: 16px; padding: 11px; margin-bottom: 10px; border: 1.5px solid transparent; box-shadow: 0 3px 10px rgba(10,37,64,.05); cursor: pointer; }
+  .src.active { border-color: #00B578; }
+  .sricon { width: 42px; height: 42px; border-radius: 21px; background: #E6F7F0; display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; color: #00B578; }
+  .srmain { flex: 1; padding: 0 12px; min-width: 0; }
+  .srname { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; color: #00B578; }
+  .badge { background: #E6F7F0; color: #00B578; font-size: 10px; font-weight: 600; border-radius: 8px; padding: 2px 7px; }
+  .srurl { font-size: 11px; color: #B4B9C0; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .srstate { font-size: 12px; color: #00B578; font-weight: 600; }
+  .srstate.err { color: #F53F3F; font-weight: 400; }
+  .custom { background: #fff; border-radius: 16px; padding: 14px; margin-top: 10px; box-shadow: 0 3px 10px rgba(10,37,64,.05); }
+  .custom .lb { font-size: 13px; font-weight: 600; color: #1F2329; margin-bottom: 8px; }
+  .custom .row { display: flex; gap: 8px; }
+  .custom input { flex: 1; border: 1px solid #EDEFF2; border-radius: 12px; padding: 10px 12px; font-size: 13px; background: #F7F8FA; outline: none; font-family: inherit; color: #1F2329; }
+  .custom .btn { background: #00B578; color: #fff; border: none; border-radius: 12px; padding: 0 18px; font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer; }
+  .custom .hint { font-size: 11px; color: #B4B9C0; line-height: 16px; margin-top: 8px; }
+  .preset-t { font-size: 13px; color: #8A9099; font-weight: 600; margin: 16px 0 8px; }
+  .preset { display: flex; align-items: center; background: #fff; border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; box-shadow: 0 2px 8px rgba(10,37,64,.04); }
+  .pmain { flex: 1; min-width: 0; padding-right: 10px; }
+  .pname { font-size: 14px; font-weight: 500; color: #1F2329; }
+  .purl { font-size: 10px; color: #B4B9C0; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pbtn { background: #E6F7F0; border-radius: 10px; padding: 7px 14px; font-size: 12px; font-weight: 600; color: #00B578; cursor: pointer; }
+  .pbtn.added { background: #F0F2F5; color: #B4B9C0; }
+
+  /* 迷你播放条 + tab */
+  .playerbar { display: flex; align-items: center; background: #fff; border-radius: 16px; margin: 0 12px 6px; padding: 8px; box-shadow: 0 4px 12px rgba(10,37,64,.08); }
+  .pthumb { width: 40px; height: 40px; border-radius: 10px; background: #E6F7F0; display: flex; align-items: center; justify-content: center; color: #00B578; font-size: 17px; }
+  .pmain { flex: 1; padding: 0 10px; min-width: 0; }
+  .pname { font-size: 14px; font-weight: 600; color: #1F2329; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .psinger { font-size: 11px; color: #8A9099; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ptoggle { width: 34px; height: 34px; border-radius: 17px; background: #E6F7F0; display: flex; align-items: center; justify-content: center; color: #00B578; font-size: 11px; }
+  .pgo { font-size: 20px; color: #C0C6CC; padding: 0 4px; }
+  .tabbar { display: flex; background: #fff; border-top: 1px solid #EDEFF2; padding: 8px 0; }
+  .tab { flex: 1; display: flex; justify-content: center; align-items: center; }
+  .tab span { font-size: 13px; color: #8A9099; padding: 7px 26px; border-radius: 20px; cursor: pointer; }
+  .tab span.on { background: #E6F7F0; color: #00B578; font-weight: 600; }
+
+  .tips { margin-top: 16px; text-align: center; font-size: 12px; color: #8A9099; line-height: 20px; }
+
+  .changelog {
+    max-width: 390px; width: 100%; margin-top: 18px; background: #fff; border-radius: 14px;
+    padding: 14px 16px; box-shadow: 0 3px 10px rgba(10,37,64,.06);
+  }
+  .cl-title { font-size: 14px; font-weight: 700; color: #00B578; margin-bottom: 8px; }
+  .cl-item { font-size: 13px; color: #1F2329; line-height: 22px; }
+</style>
+</head>
+<body>
+  <h1>LxMusicPlayer · 新结构预览</h1>
+  <div class="sub">主页 / 音乐馆 / 我的；设置里管理音源；底部常驻播放条</div>
+
+  <div class="phone">
+    <div class="status"><span>9:41</span><span>🔋</span></div>
+    <div class="screen">
+      <!-- 主页 -->
+      <div class="page active" id="p-home">
+        <div class="title">洛雪音乐</div>
+        <div class="subtitle">每天更新 · 好歌不重样</div>
+        <div class="searchbar" onclick="goSearch()"><span class="ph">搜索歌曲、歌手</span><span class="searchpill">搜索</span></div>
+        <div class="sec"><h3>每日推荐</h3><span>为你精选</span></div>
+        <div class="grid">
+          <div class="card" onclick="toast('每日推荐·飙升榜')"><div class="cover" style="background:hsl(152,70%,90%)"><span class="note" style="color:hsl(152,55%,40%)">♪</span><span class="tag" style="color:hsl(152,55%,40%)">每日推荐·飙升榜</span></div><div class="cname">每日推荐·飙升榜</div><div class="cdesc">网易云音乐 · 24 小时热度上升最快</div></div>
+          <div class="card" onclick="toast('每日推荐·热歌榜')"><div class="cover" style="background:hsl(198,70%,90%)"><span class="note" style="color:hsl(198,55%,40%)">♪</span><span class="tag" style="color:hsl(198,55%,40%)">每日推荐·热歌榜</span></div><div class="cname">每日推荐·热歌榜</div><div class="cdesc">网易云音乐 · 大家都在听</div></div>
+          <div class="card" onclick="toast('每日推荐·新歌榜')"><div class="cover" style="background:hsl(268,70%,90%)"><span class="note" style="color:hsl(268,55%,40%)">♪</span><span class="tag" style="color:hsl(268,55%,40%)">每日推荐·新歌榜</span></div><div class="cname">每日推荐·新歌榜</div><div class="cdesc">网易云音乐 · 最新发布抢先听</div></div>
+          <div class="card" onclick="toast('每日推荐·酷我热歌')"><div class="cover" style="background:hsl(26,70%,90%)"><span class="note" style="color:hsl(26,55%,40%)">♪</span><span class="tag" style="color:hsl(26,55%,40%)">每日推荐·酷我热歌</span></div><div class="cname">每日推荐·酷我热歌</div><div class="cdesc">酷我音乐 · 热歌 TOP50</div></div>
+        </div>
+        <div class="tip">提示：播放歌曲前，请到「我的 → 设置 → 音源管理」加载一个音源脚本</div>
+      </div>
+
+      <!-- 音乐馆 -->
+      <div class="page" id="p-explore">
+        <div class="title">音乐馆</div>
+        <div class="subtitle">热门合集，一次听个够</div>
+        <div class="sec"><h3>热门音乐合集</h3><span></span></div>
+        <div class="grid">
+          <div class="card" onclick="toast('原创音乐榜')"><div class="cover" style="background:hsl(152,70%,90%)"><span class="note" style="color:hsl(152,55%,40%)">♪</span></div><div class="cname">原创音乐榜</div><div class="cdesc">网易云音乐 · 独立原创新声</div></div>
+          <div class="card" onclick="toast('酷我热歌榜')"><div class="cover" style="background:hsl(26,70%,90%)"><span class="note" style="color:hsl(26,55%,40%)">♪</span></div><div class="cname">酷我热歌榜</div><div class="cdesc">酷我音乐 · 热歌 TOP50</div></div>
+          <div class="card" onclick="toast('腾讯巅峰榜')"><div class="cover" style="background:hsl(330,70%,90%)"><span class="note" style="color:hsl(330,55%,40%)">♪</span></div><div class="cname">腾讯巅峰榜</div><div class="cdesc">QQ 音乐 · 巅峰流行榜</div></div>
+          <div class="card" onclick="toast('飙升榜')"><div class="cover" style="background:hsl(198,70%,90%)"><span class="note" style="color:hsl(198,55%,40%)">♪</span></div><div class="cname">飙升榜</div><div class="cdesc">网易云音乐 · 热度上升最快</div></div>
+          <div class="card" onclick="toast('新歌榜')"><div class="cover" style="background:hsl(268,70%,90%)"><span class="note" style="color:hsl(268,55%,40%)">♪</span></div><div class="cname">新歌榜</div><div class="cdesc">网易云音乐 · 最新发布</div></div>
+          <div class="card" onclick="toast('热歌榜')"><div class="cover" style="background:hsl(22,70%,90%)"><span class="note" style="color:hsl(22,55%,40%)">♪</span></div><div class="cname">热歌榜</div><div class="cdesc">网易云音乐 · 大家都在听</div></div>
+        </div>
+      </div>
+
+      <!-- 我的 -->
+      <div class="page" id="p-mine">
+        <div class="me-top">
+          <div class="avatar">♪</div>
+          <div><div class="me-name">我的音乐</div><div class="me-sub">本地播放 · 数据保存在本机</div></div>
+        </div>
+        <div class="report" onclick="toast('听歌报告')">
+          <div class="it"><div class="num">36</div><div class="lb">播放次数</div></div>
+          <div class="div"></div>
+          <div class="it"><div class="num">2 小时</div><div class="lb">累计时长</div></div>
+          <div class="div"></div>
+          <div class="it"><div class="num">晴天</div><div class="lb">最爱单曲</div></div>
+          <div class="go">›</div>
+        </div>
+        <div class="sec2">最近播放</div>
+        <div class="recent" onclick="toast('播放：晴天')"><div class="rthumb">♪</div><div class="rmain"><div class="rname">晴天</div><div class="rsinger">周杰伦 · 叶惠美</div></div><div class="rplay">▶</div></div>
+        <div class="recent" onclick="toast('播放：稻香')"><div class="rthumb">♪</div><div class="rmain"><div class="rname">稻香</div><div class="rsinger">周杰伦 · 魔杰座</div></div><div class="rplay">▶</div></div>
+        <div class="sec2">自建歌单</div>
+        <div class="hscroll">
+          <div class="hcard"><div class="create" onclick="toast('新建歌单')"><span class="plus">＋</span><span class="t">新建歌单</span></div></div>
+          <div class="hcard" onclick="toast('歌单：华语经典')"><div class="hcover" style="background:#E6F7F0;color:#00B578">♪<span class="hcount">12 首</span></div><div class="hname">华语经典</div></div>
+          <div class="hcard" onclick="toast('歌单：深夜循环')"><div class="hcover" style="background:#EDEFF2;color:#8A9099">♪<span class="hcount">6 首</span></div><div class="hname">深夜循环</div></div>
+        </div>
+        <div class="sec2">收藏歌单</div>
+        <div class="hscroll">
+          <div class="hcard" onclick="toast('收藏：热歌榜')"><div class="hcover" style="background:hsl(22,70%,90%);color:hsl(22,55%,40%)">♪</div><div class="hname">热歌榜</div></div>
+        </div>
+        <div class="settings-row" onclick="go('settings')">
+          <div class="sicon">⚙</div><div class="stext">设置 · 音源管理</div><div class="sgo">›</div>
+        </div>
+      </div>
+
+      <!-- 设置 -->
+      <div class="page" id="p-settings">
+        <div class="back-row"><span class="back" onclick="go('mine')">‹</span><span class="back-title">设置</span></div>
+        <div class="sec-t">音源管理</div>
+        <div class="sec-d">播放地址、歌词、封面由音源脚本提供。点按音源卡片加载并切换，未加载音源时无法播放。</div>
+        <div class="src active">
+          <div class="sricon">H</div>
+          <div class="srmain">
+            <div class="srname">huibq <span class="badge">使用中</span></div>
+            <div class="srurl">https://raw.githubusercontent.com/…/latest.js</div>
+          </div>
+          <div class="srstate">已就绪</div>
+        </div>
+        <div class="src">
+          <div class="sricon" style="background:#F0F2F5;color:#8A9099">L</div>
+          <div class="srmain">
+            <div class="srname" style="color:#1F2329">lx</div>
+            <div class="srurl">https://raw.githubusercontent.com/…/latest.js</div>
+          </div>
+          <div class="srstate" style="color:#B4B9C0;font-weight:400">加载</div>
+        </div>
+        <div class="sec-t">已添加音源</div>
+        <div class="src">
+          <div class="sricon" style="background:#E6F7F0;color:#00B578">H</div>
+          <div class="srmain">
+            <div class="srname" style="color:#1F2329">huibq</div>
+            <div class="srurl">酷我/酷狗/腾讯/网易/咪咕 5 源</div>
+          </div>
+          <div class="srstate ok">已加载</div>
+        </div>
+        <div class="sec-t">添加音源</div>
+        <div class="custom">
+          <div class="lb">自定义脚本地址</div>
+          <div class="row"><input placeholder="https://…/latest.js" /><button class="btn">添加</button></div>
+          <div class="hint">填写音源脚本直链（awaw.cc 页面里每个脚本的链接），加载失败会自动尝试国内加速前缀</div>
+        </div>
+        <div class="preset-t">内置推荐（点按添加，实测可用）</div>
+        <div class="preset"><div class="pmain"><div class="pname">huibq</div><div class="purl">酷我/酷狗/腾讯/网易/咪咕</div></div><span class="pbtn added">已添加</span></div>
+        <div class="preset"><div class="pmain"><div class="pname">QDY 全豆要聚合</div><div class="purl">酷我/酷狗/腾讯/网易/咪咕</div></div><span class="pbtn">添加</span></div>
+        <div class="preset"><div class="pmain"><div class="pname">ikun</div><div class="purl">酷我/网易</div></div><span class="pbtn">添加</span></div>
+      </div>
+    </div>
+
+    <div class="playerbar" onclick="toast('进入播放页')">
+      <div class="pthumb">♪</div>
+      <div class="pmain"><div class="pname">晴天</div><div class="psinger">周杰伦</div></div>
+      <div class="ptoggle" onclick="event.stopPropagation();toast('暂停/播放')">❚❚</div>
+      <div class="pgo">›</div>
+    </div>
+
+    <div class="tabbar">
+      <div class="tab"><span id="tab-home" class="on" onclick="go('home')">主页</span></div>
+      <div class="tab"><span id="tab-explore" onclick="go('explore')">音乐馆</span></div>
+      <div class="tab"><span id="tab-mine" onclick="go('mine')">我的</span></div>
+    </div>
+  </div>
+
+  <div class="changelog">
+    <div class="cl-title">本版更新</div>
+    <div class="cl-item">· 打开 App 自动加载上次使用的音源，不用再每次手动添加</div>
+    <div class="cl-item">· 封面 / 歌曲图片自动补齐（网易云兜底），播放页自动显示歌词</div>
+    <div class="cl-item">· 本地缓存播放进度，下次打开自动从上次位置继续播放</div>
+  </div>
+
+  <div class="tips">预览为示意效果（示例歌曲/数据），实际内容以搜索、音源脚本与合集接口返回为准</div>
+
+  <script>
+    function go(name) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab span').forEach(s => s.classList.remove('on'));
+      if (name === 'home' || name === 'explore' || name === 'mine') {
+        document.getElementById('tab-' + name).classList.add('on');
+      }
+      document.getElementById('p-' + name).classList.add('active');
+    }
+    function goSearch() { toast('点击后进入全屏搜索页'); }
+    function toast(msg) { alert(msg); }
+  </script>
+</body>
+</html>
