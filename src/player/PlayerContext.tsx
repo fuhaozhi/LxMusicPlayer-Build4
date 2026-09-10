@@ -8,6 +8,7 @@ import Video from 'react-native-video';
 import type { LxMusicApi } from '../lx-api/index.js';
 import type { PlayerState, Song } from '../types';
 import { toMusicInfo } from '../sourceManager';
+import { useLibrary } from '../library';
 import { formatTime } from './lrc';
 
 interface PlayerContextValue {
@@ -31,6 +32,7 @@ export function usePlayer(): PlayerContextValue {
 const QUALITY_FALLBACK = ['320k', '128k'] as const;
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
+  const library = useLibrary();
   const [state, setState] = useState<PlayerState>({
     song: null,
     url: null,
@@ -84,6 +86,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         const res = await api.getMusicUrl(song.source, info, quality);
         if (res?.url) {
           setState(prev => ({ ...prev, url: res.url, paused: false, buffering: false, error: null }));
+          library.bumpPlay(song);
+          library.addRecent(song);
           return;
         }
       } catch (e) {
@@ -129,7 +133,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           ignoreSilentSwitch="ignore"
           onLoad={({ duration }) => setState(prev => ({ ...prev, duration }))}
           onProgress={({ currentTime }) => setState(prev => ({ ...prev, currentTime }))}
-          onEnd={() => next()}
+          onEnd={() => {
+            library.bumpSeconds(state.duration);
+            next();
+          }}
           onBuffer={({ isBuffering }) => setState(prev => ({ ...prev, buffering: isBuffering }))}
           onError={e => setState(prev => ({ ...prev, paused: true, buffering: false, error: `播放失败：${JSON.stringify(e)}` }))}
           style={{ width: 0, height: 0, position: 'absolute' }}

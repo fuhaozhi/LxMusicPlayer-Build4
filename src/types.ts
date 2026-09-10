@@ -49,3 +49,41 @@ export interface LrcLine {
   time: number;
   text: string;
 }
+
+/** 合集 / 榜单（主页每日推荐、音乐馆热门合集） */
+export interface Collection {
+  id: string;
+  name: string;
+  desc: string;
+  /** 拉取歌曲的接口来源 */
+  source: 'wy' | 'kw' | 'tx';
+  /** 接口参数（榜单/歌单 ID） */
+  apiId: string;
+  /** 封面色相 0-360，用于渐变色块 */
+  hue: number;
+}
+
+/** 自建歌单 */
+export interface LocalPlaylist {
+  id: string;
+  name: string;
+  createdAt: number;
+  songs: Song[];
+}
+
+/** 收藏的合集 */
+export interface FavCollection {
+  id: string;
+  name: string;
+  desc: string;
+  source: 'wy' | 'kw' | 'tx';
+  apiId: string;
+  hue: number;
+}
+
+/** 听歌统计 */
+export interface ListenStats {
+  totalPlays: number;
+  totalSeconds: number;
+  songs: { key: string; name: string; singer: string; count: number }[];
+}

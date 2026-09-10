@@ -12,7 +12,13 @@ import type { LyricInfo } from '../lx-api/types.js';
 
 const LINE_H = 30;
 
-export default function NowPlayingScreen({ manager }: { manager: ReturnType<typeof useSourceManager> }) {
+export default function NowPlayingScreen({
+  manager,
+  onBack,
+}: {
+  manager: ReturnType<typeof useSourceManager>;
+  onBack: () => void;
+}) {
   const { state, toggle, next, prev } = usePlayer();
   const [lyric, setLyric] = useState<LyricInfo | null>(null);
   const [lyricLoading, setLyricLoading] = useState(false);
@@ -76,6 +82,9 @@ export default function NowPlayingScreen({ manager }: { manager: ReturnType<type
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <Pressable onPress={onBack} style={styles.backBtn} hitSlop={8}>
+          <Text style={styles.backText}>‹</Text>
+        </Pressable>
         <Text style={styles.headerTitle}>正在播放</Text>
       </View>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -173,8 +182,10 @@ export default function NowPlayingScreen({ manager }: { manager: ReturnType<type
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F6F8' },
-  header: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 2 },
-  headerTitle: { fontSize: 30, fontWeight: '700', color: '#1F2329' },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 2 },
+  backBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginRight: 2 },
+  backText: { fontSize: 34, color: '#1F2329', lineHeight: 34, marginTop: -4 },
+  headerTitle: { fontSize: 24, fontWeight: '700', color: '#1F2329' },
   content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30, alignItems: 'center' },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F6F8' },
   emptyNote: { fontSize: 56, color: '#DDE3E9' },
