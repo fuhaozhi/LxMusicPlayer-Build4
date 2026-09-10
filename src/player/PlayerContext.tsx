@@ -12,6 +12,7 @@ import type { LxMusicApi } from '../lx-api/index.js';
 import type { PlayerState, Song } from '../types';
 import { toMusicInfo } from '../sourceManager';
 import { useLibrary } from '../library';
+import { resolveCover } from '../cover';
 import { KEYS, load, save } from '../storage';
 import { formatTime } from './lrc';
 
@@ -179,7 +180,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (pendingSeekRef.current === 0) pendingSeekRef.current = null;
   };
 
-  // ---- 锁屏「正在播放」：状态变化时同步到原生（封面由原生下载）----
+  // ---- 锁屏「正在播放」：状态变化时同步到原生（封面由原生下载，支持 data URI）----
   useEffect(() => {
     if (!NowPlayingNative?.setNowPlaying) return;
     if (!state.song || !state.url) {
@@ -190,15 +191,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // currentTime 节流 5s；暂停/切歌/加载完成立即更新
     if (now - lastLockRef.current < 5000 && state.currentTime > 0 && !state.paused) return;
     lastLockRef.current = now;
-    NowPlayingNative.setNowPlaying({
+    const info = {
       title: state.song.name,
       artist: state.song.singer,
       album: state.song.album ?? '',
-      artworkUrl: state.song.pic ?? '',
       duration: state.duration || 0,
       currentTime: state.currentTime || 0,
       rate: state.paused ? 0 : 1,
-    });
+    };
+    if (state.song.pic) {
+      NowPlayingNative.setNowPlaying({ ...info, artworkUrl: state.song.pic });
+    } else {
+      // 无自带封面：用统一兜底拿 dataURI（避免锁屏卡片无图）
+      resolveCover(state.song).then(dataUri => {
+        NowPlayingNative?.setNowPlaying?.({ ...info, artworkUrl: dataUri ?? '' });
+      });
+    }
   }, [state.song, state.url, state.paused, state.duration, state.currentTime]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- 锁屏远程控制（播放/暂停/下一首/上一首/拖动进度）----

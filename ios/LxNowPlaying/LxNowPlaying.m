@@ -116,6 +116,27 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
 
 - (void)loadArtwork:(NSString *)urlString
          completion:(void (^)(MPMediaItemArtwork *))completion {
+  // data URI（base64）直接解码
+  if ([urlString hasPrefix:@"data:image"]) {
+    NSArray<NSString *> *parts = [urlString componentsSeparatedByString:@","];
+    if (parts.count == 2) {
+      NSData *data = [[NSData alloc] initWithBase64EncodedString:parts[1]
+                                                         options:0];
+      UIImage *image = data ? [UIImage imageWithData:data] : nil;
+      if (image) {
+        MPMediaItemArtwork *art =
+            [[MPMediaItemArtwork alloc]
+                initWithBoundsSize:image.size
+                     requestHandler:^UIImage *_Nonnull(CGSize size) {
+                       return image;
+                     }];
+        completion(art);
+        return;
+      }
+    }
+    completion(nil);
+    return;
+  }
   NSURL *url = [NSURL URLWithString:urlString];
   if (!url) {
     completion(nil);
