@@ -7,14 +7,15 @@
 const RAW = 'https://raw.githubusercontent.com/pdone/lx-music-source/main';
 const PROXY = 'https://ghproxy.net/raw.githubusercontent.com/pdone/lx-music-source/main';
 export const LX_MUSIC_SOURCES = [
-    { id: 'sixyin', name: 'SixYin', url: `${RAW}/sixyin/latest.js`, acceleratedUrl: `${PROXY}/sixyin/latest.js` },
-    { id: 'huibq', name: 'Huibq', url: `${RAW}/huibq/latest.js`, acceleratedUrl: `${PROXY}/huibq/latest.js` },
-    { id: 'flower', name: 'Flower', url: `${RAW}/flower/latest.js`, acceleratedUrl: `${PROXY}/flower/latest.js` },
-    { id: 'lx', name: 'LX', url: `${RAW}/lx/latest.js`, acceleratedUrl: `${PROXY}/lx/latest.js` },
-    { id: 'ikun', name: 'ikun', url: `${RAW}/ikun/latest.js`, acceleratedUrl: `${PROXY}/ikun/latest.js` },
-    { id: 'grass', name: 'Grass', url: `${RAW}/grass/latest.js`, acceleratedUrl: `${PROXY}/grass/latest.js` },
-    { id: 'juhe', name: 'JuheApi', url: `${RAW}/juhe/latest.js`, acceleratedUrl: `${PROXY}/juhe/latest.js` },
-    { id: 'qdy', name: 'QDY', url: `${RAW}/qdy/latest.js`, acceleratedUrl: `${PROXY}/qdy/latest.js` },
+    // 以下为在 iOS（FunctionSandbox/Hermes 兼容层）实测可正常加载的音源。
+    // sixyin/flower/lx/grass/juhe 已在实测中被移除：
+    //   sixyin — 自带版本校验，拒绝在非官方环境加载
+    //   flower — 版本检查服务器（97.64.37.235 / js.org / mirror.com）已停运
+    //   lx     — 脚本依赖 babel regeneratorRuntime，沙箱不提供
+    //   grass/juhe — 初始化超时（外部服务不可达）
+    { id: 'huibq', name: 'Huibq', url: `${RAW}/huibq/latest.js`, acceleratedUrl: `${PROXY}/huibq/latest.js`, note: '酷我/酷狗/腾讯/网易/咪咕 5 源' },
+    { id: 'qdy', name: 'QDY 全豆要聚合', url: `${RAW}/qdy/latest.js`, acceleratedUrl: `${PROXY}/qdy/latest.js`, note: '酷我/酷狗/腾讯/网易/咪咕 5 源' },
+    { id: 'ikun', name: 'ikun', url: `${RAW}/ikun/latest.js`, acceleratedUrl: `${PROXY}/ikun/latest.js`, note: '酷我/网易 2 源' },
 ];
 /** 其他可用的加速前缀（来自 awaw.cc 页面） */
 export const PROXY_PREFIXES = [
