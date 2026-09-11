@@ -8,6 +8,11 @@
   BOOL commandsInstalled;
   BOOL interruptionObserverInstalled;
   NSMutableArray<id> *commandTargets;
+  RCTResponseSenderBlock commandHandler;
+  NSTimer *progressTimer;
+  double lastElapsed;
+  double lastRate;
+  BOOL hasProgress;
 }
 
 RCT_EXPORT_MODULE()
@@ -24,13 +29,52 @@ RCT_EXPORT_MODULE()
 }
 
 - (void)dealloc {
+  [self stopProgressTimer];
   if (interruptionObserverInstalled) {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
   }
 }
 
-- (NSArray<NSString *> *)supportedEvents {
-  return @[ @"LxNowPlayingCommand" ];
+/// 统一把锁屏远程命令推给 JS。
+/// 说明：不用 RCTEventEmitter（新架构下 legacy 事件不可靠），改用回调注册，
+/// JS 通过 setCommandHandler 传入回调，命令到达时直接调用回调。
+- (void)emitCommand:(NSDictionary *)body {
+  if (self->commandHandler) {
+    self->commandHandler(@[ body ]);
+  }
+}
+
+RCT_EXPORT_METHOD(setCommandHandler:(RCTResponseSenderBlock)handler) {
+  commandHandler = handler;
+}
+
+/// 每秒按 rate 推进锁屏进度（保证进度条走动、拖动位置有基准）
+- (void)startProgressTimer {
+  if (progressTimer) return;
+  progressTimer = [NSTimer timerWithTimeInterval:1.0
+                                          target:self
+                                        selector:@selector(tickProgress)
+                                        userInfo:nil
+                                         repeats:YES];
+  [[NSRunLoop mainRunLoop] addTimer:progressTimer
+                            forMode:NSRunLoopCommonModes];
+}
+
+- (void)tickProgress {
+  if (!hasProgress) return;
+  if (lastRate > 0) lastElapsed += 1.0;
+  NSMutableDictionary *m =
+      [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
+  if (!m) m = [NSMutableDictionary dictionary];
+  m[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @(lastElapsed);
+  m[MPNowPlayingInfoPropertyPlaybackRate] = @(lastRate);
+  [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = m;
+}
+
+- (void)stopProgressTimer {
+  [progressTimer invalidate];
+  progressTimer = nil;
+  hasProgress = NO;
 }
 
 - (void)configureAudioSession {
@@ -64,7 +108,7 @@ RCT_EXPORT_MODULE()
     if (opt && opt.unsignedIntegerValue == AVAudioSessionInterruptionOptionShouldResume) {
       NSError *err = nil;
       [[AVAudioSession sharedInstance] setActive:YES error:&err];
-      [self sendEventWithName:@"LxNowPlayingCommand" body:@{@"type" : @"play"}];
+      [self emitCommand:@{@"type" : @"play"}];
     }
   }
 }
@@ -89,6 +133,10 @@ RCT_EXPORT_METHOD(setNowPlaying:(NSDictionary *)info) {
     now[MPNowPlayingInfoPropertyElapsedPlaybackTime] =
         currentTime ? currentTime : @0;
     now[MPNowPlayingInfoPropertyPlaybackRate] = rate ? rate : @1;
+    lastElapsed = currentTime ? [currentTime doubleValue] : 0;
+    lastRate = rate ? [rate doubleValue] : 1;
+    hasProgress = YES;
+    [self startProgressTimer];
   }
 
   [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = now;
@@ -111,6 +159,7 @@ RCT_EXPORT_METHOD(setNowPlaying:(NSDictionary *)info) {
 }
 
 RCT_EXPORT_METHOD(clearNowPlaying) {
+  [self stopProgressTimer];
   [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nil;
 }
 
@@ -171,8 +220,7 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
   id playTarget = [center.playCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
                         MPRemoteCommandEvent *_Nonnull event) {
-        [self sendEventWithName:@"LxNowPlayingCommand"
-                           body:@{@"type" : @"play"}];
+        [self emitCommand:@{@"type" : @"play"}];
         return MPRemoteCommandHandlerStatusSuccess;
       }];
   [commandTargets addObject:playTarget];
@@ -181,8 +229,7 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
   id pauseTarget = [center.pauseCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
                         MPRemoteCommandEvent *_Nonnull event) {
-        [self sendEventWithName:@"LxNowPlayingCommand"
-                           body:@{@"type" : @"pause"}];
+        [self emitCommand:@{@"type" : @"pause"}];
         return MPRemoteCommandHandlerStatusSuccess;
       }];
   [commandTargets addObject:pauseTarget];
@@ -191,8 +238,7 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
   id toggleTarget = [center.togglePlayPauseCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
                         MPRemoteCommandEvent *_Nonnull event) {
-        [self sendEventWithName:@"LxNowPlayingCommand"
-                           body:@{@"type" : @"toggle"}];
+        [self emitCommand:@{@"type" : @"toggle"}];
         return MPRemoteCommandHandlerStatusSuccess;
       }];
   [commandTargets addObject:toggleTarget];
@@ -201,8 +247,7 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
   id nextTarget = [center.nextTrackCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
                         MPRemoteCommandEvent *_Nonnull event) {
-        [self sendEventWithName:@"LxNowPlayingCommand"
-                           body:@{@"type" : @"next"}];
+        [self emitCommand:@{@"type" : @"next"}];
         return MPRemoteCommandHandlerStatusSuccess;
       }];
   [commandTargets addObject:nextTarget];
@@ -211,8 +256,7 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
   id prevTarget = [center.previousTrackCommand
       addTargetWithHandler:^MPRemoteCommandHandlerStatus(
                         MPRemoteCommandEvent *_Nonnull event) {
-        [self sendEventWithName:@"LxNowPlayingCommand"
-                           body:@{@"type" : @"prev"}];
+        [self emitCommand:@{@"type" : @"prev"}];
         return MPRemoteCommandHandlerStatusSuccess;
       }];
   [commandTargets addObject:prevTarget];
@@ -224,11 +268,10 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
                         MPRemoteCommandEvent *_Nonnull event) {
         MPChangePlaybackPositionCommandEvent *posEvent =
             (MPChangePlaybackPositionCommandEvent *)event;
-        [self sendEventWithName:@"LxNowPlayingCommand"
-                           body:@{
-                             @"type" : @"seek",
-                             @"position" : @(posEvent.positionTime)
-                           }];
+        [self emitCommand:@{
+          @"type" : @"seek",
+          @"position" : @(posEvent.positionTime)
+        }];
         return MPRemoteCommandHandlerStatusSuccess;
       }];
   [commandTargets addObject:seekTarget];

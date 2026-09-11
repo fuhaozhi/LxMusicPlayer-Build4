@@ -6,7 +6,7 @@
  * 上次播放缓存（自动续播）。
  */
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { DeviceEventEmitter, NativeModules } from 'react-native';
+import { NativeModules } from 'react-native';
 import Video from 'react-native-video';
 import type { LxMusicApi } from '../lx-api/index.js';
 import type { PlayerState, Song } from '../types';
@@ -49,7 +49,11 @@ interface LastPlay {
 }
 
 const NowPlayingNative = NativeModules?.LxNowPlaying as
-  | { setNowPlaying?: (info: any) => void; clearNowPlaying?: () => void }
+  | {
+      setNowPlaying?: (info: any) => void;
+      clearNowPlaying?: () => void;
+      setCommandHandler?: (handler: ((events: any[]) => void) | null) => void;
+    }
   | undefined;
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
@@ -74,8 +78,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const seekAtRef = useRef(0);
   /** 进度写盘节流 */
   const lastPersistRef = useRef(0);
-  /** 锁屏信息更新节流 */
+  /** 锁屏信息更新节流（仅进度变化时节流；歌曲/时长/暂停态变化立即推送） */
   const lastLockRef = useRef(0);
+  const lastLockKeyRef = useRef('');
   /** 预取的下一首播放地址（熄屏/后台切歌用，避免后台现场网络取链被挂起） */
   const prefetchRef = useRef<{ songKey: string; url: string } | null>(null);
   const prefetchSeqRef = useRef(0);
@@ -280,9 +285,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const now = Date.now();
-    // currentTime 节流 5s；暂停/切歌/加载完成立即更新
-    if (now - lastLockRef.current < 5000 && state.currentTime > 0 && !state.paused) return;
-    lastLockRef.current = now;
+    // 关键信息（歌曲/时长/播放暂停态）变化 → 立即推送；
+    // 仅进度（currentTime）变化 → 5s 节流，避免高频刷原生
+    const key = `${songKeyOf(state.song)}|${state.duration}|${state.paused}`;
+    if (key !== lastLockKeyRef.current) {
+      lastLockKeyRef.current = key;
+      lastLockRef.current = now;
+    } else if (now - lastLockRef.current < 5000 && state.currentTime > 0 && !state.paused) {
+      return;
+    } else {
+      lastLockRef.current = now;
+    }
     const info = {
       title: state.song.name,
       artist: state.song.singer,
@@ -302,8 +315,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   }, [state.song, state.url, state.paused, state.duration, state.currentTime]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- 锁屏远程控制（播放/暂停/下一首/上一首/拖动进度）----
+  // 用原生回调注册（新架构下 RCTEventEmitter 事件不可靠），命令到达即回调
   useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('LxNowPlayingCommand', (e: any) => {
+    const mod = NowPlayingNative;
+    if (!mod?.setCommandHandler) return;
+    const handler = (events: any[]) => {
+      const e = Array.isArray(events) ? events[0] : events;
       switch (e?.type) {
         case 'play':
           setState(prev => ({ ...prev, paused: false }));
@@ -326,8 +343,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         default:
           break;
       }
-    });
-    return () => sub.remove();
+    };
+    mod.setCommandHandler(handler);
+    return () => {
+      mod.setCommandHandler?.(null);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
