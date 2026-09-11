@@ -41,11 +41,19 @@ export function usePlayer(): PlayerContextValue {
 
 const QUALITY_FALLBACK = ['320k', '128k'] as const;
 
-/** 上次播放的持久化结构 */
+/** 上次播放的持久化结构（含完整队列，重启后恢复整个列表继续播） */
 interface LastPlay {
   song: Song;
+  queue: Song[];
+  index: number;
   currentTime: number;
   ts: number;
+}
+
+/** 定时关闭：到点自动暂停 */
+interface SleepTimer {
+  endsAt: number;
+  total: number;
 }
 
 const NowPlayingNative = NativeModules?.LxNowPlaying as
@@ -55,6 +63,25 @@ const NowPlayingNative = NativeModules?.LxNowPlaying as
       setCommandHandler?: (handler: ((events: any[]) => void) | null) => void;
     }
   | undefined;
+
+interface PlayerContextValue {
+  state: PlayerState;
+  queue: Song[];
+  play: (song: Song, api: LxMusicApi | null, queue?: Song[]) => Promise<void>;
+  toggle: () => void;
+  next: () => void;
+  prev: () => void;
+  /** 跳转到指定秒数（进度条拖动 / 锁屏拖动） */
+  seekTo: (t: number) => void;
+  setCurrentTime: (t: number) => void;
+  /** 恢复上次播放（App 启动、音源加载完成后调用） */
+  restoreLast: (api: LxMusicApi | null) => Promise<void>;
+  /** 定时关闭：剩余秒数（0 表示未开启） */
+  sleepRemaining: number;
+  /** 开启/调整定时关闭（分钟）；<=0 为取消 */
+  startSleepTimer: (minutes: number) => void;
+  cancelSleepTimer: () => void;
+}
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const library = useLibrary();
@@ -91,8 +118,51 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const songKeyOf = (s: Song) => `${s.source}:${s.id}`;
 
+  /** 定时关闭状态（endsAt 毫秒时间戳）与剩余秒数 */
+  const [sleepTimer, setSleepTimer] = useState<SleepTimer | null>(null);
+  const [sleepRemaining, setSleepRemaining] = useState(0);
+
+  const startSleepTimer: PlayerContextValue['startSleepTimer'] = minutes => {
+    if (minutes <= 0) {
+      setSleepTimer(null);
+      setSleepRemaining(0);
+      return;
+    }
+    const total = minutes * 60 * 1000;
+    setSleepTimer({ endsAt: Date.now() + total, total });
+    setSleepRemaining(minutes * 60);
+  };
+
+  const cancelSleepTimer: PlayerContextValue['cancelSleepTimer'] = () => {
+    setSleepTimer(null);
+    setSleepRemaining(0);
+  };
+
+  // 定时关闭倒计时：到点自动暂停
+  useEffect(() => {
+    if (!sleepTimer) return;
+    const id = setInterval(() => {
+      const remainMs = sleepTimer.endsAt - Date.now();
+      if (remainMs <= 0) {
+        clearInterval(id);
+        setSleepTimer(null);
+        setSleepRemaining(0);
+        setState(prev => ({ ...prev, paused: true }));
+        return;
+      }
+      setSleepRemaining(Math.ceil(remainMs / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [sleepTimer]);
+
   const persistPlay = (song: Song, currentTime: number) => {
-    const last: LastPlay = { song, currentTime, ts: Date.now() };
+    const last: LastPlay = {
+      song,
+      queue: queueRef.current.length > 0 ? queueRef.current : [song],
+      index: indexRef.current >= 0 ? indexRef.current : 0,
+      currentTime,
+      ts: Date.now(),
+    };
     save(KEYS.lastPlay, last);
   };
 
@@ -274,14 +344,24 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  /** 恢复上次播放：有缓存且当前未在播放时，用当前音源重新取链并续播 */
+  /** 恢复上次播放：恢复完整队列与当前歌曲，用当前音源重新取链并续播 */
   const restoreLast: PlayerContextValue['restoreLast'] = async api => {
     if (state.song) return; // 已有播放则不打扰
     const last = load<LastPlay | null>(KEYS.lastPlay, null);
     if (!last?.song) return;
-    const time = Math.max(0, Number(last.currentTime) || 0);
-    pendingSeekRef.current = { songKey: songKeyOf(last.song), time };
-    await play(last.song, api);
+    const q = Array.isArray(last.queue) && last.queue.length > 0 ? last.queue : [last.song];
+    let idx =
+      Number.isInteger(last.index) && last.index >= 0 && last.index < q.length ? last.index : 0;
+    // 当前歌曲不在队列（数据异常）时按歌曲定位
+    if (!q[idx] || q[idx].source !== last.song.source || q[idx].id !== last.song.id) {
+      const found = q.findIndex(s => s.source === last.song.source && s.id === last.song.id);
+      idx = found >= 0 ? found : 0;
+    }
+    pendingSeekRef.current = {
+      songKey: songKeyOf(last.song),
+      time: Math.max(0, Number(last.currentTime) || 0),
+    };
+    await playIndex(idx, q, api);
   };
 
   // ---- 锁屏「正在播放」：状态变化时同步到原生（封面由原生下载，支持 data URI）----
@@ -376,6 +456,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         seekTo,
         setCurrentTime: t => setState(prev => ({ ...prev, currentTime: t })),
         restoreLast,
+        sleepRemaining,
+        startSleepTimer,
+        cancelSleepTimer,
       }}
     >
       {children}

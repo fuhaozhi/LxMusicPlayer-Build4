@@ -3,7 +3,7 @@
  * 浅色清新风：大封面卡片 + 歌词自动滚动 + 圆角控制
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { ActivityIndicator, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { formatTime, parseLrc, currentLrcIndex } from '../player/lrc';
 import { usePlayer } from '../player/PlayerContext';
 import { lyricText, toMusicInfo } from '../sourceManager';
@@ -21,9 +21,11 @@ export default function NowPlayingScreen({
   manager: ReturnType<typeof useSourceManager>;
   onBack: () => void;
 }) {
-  const { state, toggle, next, prev, seekTo } = usePlayer();
+  const { state, toggle, next, prev, seekTo, sleepRemaining, startSleepTimer, cancelSleepTimer } =
+    usePlayer();
   const [lyric, setLyric] = useState<LyricInfo | null>(null);
   const [lyricLoading, setLyricLoading] = useState(false);
+  const [timerOpen, setTimerOpen] = useState(false);
   const lrcRef = useRef<ScrollViewInstance>(null);
 
   // ---- 进度条拖动 seek ----
@@ -245,6 +247,14 @@ export default function NowPlayingScreen({
           </Pressable>
         </View>
 
+        {/* 定时关闭 */}
+        <Pressable style={styles.timerRow} onPress={() => setTimerOpen(true)} hitSlop={8}>
+          <Text style={[styles.timerIcon, sleepRemaining > 0 && styles.timerActive]}>⏱</Text>
+          <Text style={[styles.timerText, sleepRemaining > 0 && styles.timerActive]}>
+            {sleepRemaining > 0 ? `定时关闭 · ${formatTime(sleepRemaining)}` : '定时关闭'}
+          </Text>
+        </Pressable>
+
         {state.error ? (
           <View style={styles.errorBox}>
             <Text style={styles.errorText} numberOfLines={3}>
@@ -258,6 +268,43 @@ export default function NowPlayingScreen({
           </View>
         ) : null}
       </ScrollView>
+
+      {/* 定时关闭选择面板 */}
+      <Modal visible={timerOpen} transparent animationType="fade" onRequestClose={() => setTimerOpen(false)}>
+        <Pressable style={styles.mask} onPress={() => setTimerOpen(false)}>
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <Text style={styles.sheetTitle}>定时关闭</Text>
+            <Text style={styles.sheetHint}>到点后自动暂停播放</Text>
+            {[15, 30, 45, 60, 90].map(min => (
+              <Pressable
+                key={min}
+                style={styles.sheetRow}
+                onPress={() => {
+                  startSleepTimer(min);
+                  setTimerOpen(false);
+                }}
+              >
+                <Text style={styles.sheetRowText}>{min} 分钟</Text>
+                <Text style={styles.sheetRowGo}>›</Text>
+              </Pressable>
+            ))}
+            {sleepRemaining > 0 ? (
+              <Pressable
+                style={[styles.sheetRow, styles.sheetCancelRow]}
+                onPress={() => {
+                  cancelSleepTimer();
+                  setTimerOpen(false);
+                }}
+              >
+                <Text style={styles.sheetCancelText}>取消定时（剩余 {formatTime(sleepRemaining)}）</Text>
+              </Pressable>
+            ) : null}
+            <Pressable style={styles.sheetCancelRow} onPress={() => setTimerOpen(false)}>
+              <Text style={styles.sheetClose}>关闭</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -326,6 +373,34 @@ const styles = StyleSheet.create({
     backgroundColor: '#00B578',
   },
   controls: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 34 },
+  timerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, paddingHorizontal: 12, paddingVertical: 8 },
+  timerIcon: { fontSize: 15, color: '#8A9099', marginRight: 6 },
+  timerText: { fontSize: 13, color: '#8A9099' },
+  timerActive: { color: '#00B578' },
+  mask: { flex: 1, backgroundColor: 'rgba(20,24,28,0.4)', justifyContent: 'flex-end' },
+  sheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 30,
+  },
+  sheetTitle: { fontSize: 17, fontWeight: '700', color: '#1F2329', textAlign: 'center' },
+  sheetHint: { fontSize: 12, color: '#B4B9C0', textAlign: 'center', marginTop: 4, marginBottom: 6 },
+  sheetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 13,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F0F2F5',
+  },
+  sheetRowText: { fontSize: 15, color: '#1F2329' },
+  sheetRowGo: { fontSize: 18, color: '#C0C6CC' },
+  sheetCancelRow: { justifyContent: 'center', marginTop: 4 },
+  sheetCancelText: { fontSize: 14, color: '#F53F3F', textAlign: 'center' },
+  sheetClose: { fontSize: 14, color: '#8A9099', textAlign: 'center' },
   ctrlBtn: { padding: 8 },
   ctrlIcon: { fontSize: 22, color: '#00B578' },
   playBtn: {
