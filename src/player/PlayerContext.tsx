@@ -13,6 +13,7 @@ import type { PlayerState, Song } from '../types';
 import { toMusicInfo } from '../sourceManager';
 import { useLibrary } from '../library';
 import { resolveCover } from '../cover';
+import { searchNetease } from '../searchSources';
 import { KEYS, load, save } from '../storage';
 import { formatTime } from './lrc';
 
@@ -78,6 +79,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   /** 预取的下一首播放地址（熄屏/后台切歌用，避免后台现场网络取链被挂起） */
   const prefetchRef = useRef<{ songKey: string; url: string } | null>(null);
   const prefetchSeqRef = useRef(0);
+  /** 播放失败已自动换源重试的歌曲（同一首只试一次，防死循环） */
+  const fallbackTriedRef = useRef<Set<string>>(new Set());
 
   const songKeyOf = (s: Song) => `${s.source}:${s.id}`;
 
@@ -226,6 +229,28 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     void playIndex(pi, list, apiRef.current);
   };
 
+  /**
+   * 播放失败自动换源：当前源（腾讯/酷我等）取到的地址失效（403/-1102 权限类错误）时，
+   * 自动用网易云搜索同名歌曲并用当前音源播放（网易取链实测稳定）。
+   * 同一首歌只尝试一次，避免反复失败。
+   */
+  const autoFallbackToNetease = async (song: Song): Promise<boolean> => {
+    const key = songKeyOf(song);
+    if (fallbackTriedRef.current.has(key)) return false;
+    fallbackTriedRef.current.add(key);
+    if (song.source === 'wy') return false;
+    try {
+      const kw = `${song.name} ${song.singer}`.trim();
+      const results = await searchNetease(kw);
+      const target = results[0];
+      if (!target) return false;
+      await play(target, apiRef.current, [target]);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const seekTo: PlayerContextValue['seekTo'] = t => {
     const target = Math.max(0, Number(t) || 0);
     seekAtRef.current = Date.now();
@@ -362,7 +387,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             next();
           }}
           onBuffer={({ isBuffering }) => setState(prev => ({ ...prev, buffering: isBuffering }))}
-          onError={e => setState(prev => ({ ...prev, paused: true, buffering: false, error: `播放失败：${JSON.stringify(e)}` }))}
+          onError={e => {
+            const msg = typeof e === 'string' ? e : JSON.stringify(e);
+            setState(prev => ({ ...prev, paused: true, buffering: false, error: `播放失败：${msg}` }));
+            const song = state.song;
+            // 权限类错误（-1102 / 403 等）＝该源取到的地址已失效 → 自动换网易同名歌曲重试
+            if (song && song.source !== 'wy' && /-1102|permission|403|not allowed/i.test(msg)) {
+              void autoFallbackToNetease(song);
+            }
+          }}
           style={{ width: 0, height: 0, position: 'absolute' }}
         />
       ) : null}

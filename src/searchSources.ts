@@ -68,8 +68,8 @@ async function searchTencent(kw: string): Promise<Song[]> {
     }));
 }
 
-/** 网易云音乐搜索 */
-async function searchNetease(kw: string): Promise<Song[]> {
+/** 网易云音乐搜索（可播源优先：qdy 音源网易取链实测稳定，播放失败自动换源也用它） */
+export async function searchNetease(kw: string): Promise<Song[]> {
   const url = `https://music.163.com/api/search/get?s=${encodeURIComponent(kw)}&type=1&limit=20`;
   const data = await fetchJson(url, { Referer: 'https://music.163.com/', 'User-Agent': 'Mozilla/5.0' });
   const list: any[] = data?.result?.songs ?? [];
@@ -108,11 +108,11 @@ async function searchMigu(kw: string): Promise<Song[]> {
     }));
 }
 
-/** 全部搜索源，按顺序尝试 */
+/** 全部搜索源，按顺序尝试；网易排最前（取链实测稳定，避免用户点到放不了的源） */
 export const SEARCH_SOURCES: { id: string; label: string; run: (kw: string) => Promise<Song[]> }[] = [
-  { id: 'kw', label: '酷我', run: searchKuwo },
-  { id: 'tx', label: '腾讯', run: searchTencent },
   { id: 'wy', label: '网易', run: searchNetease },
+  { id: 'tx', label: '腾讯', run: searchTencent },
+  { id: 'kw', label: '酷我', run: searchKuwo },
   { id: 'mg', label: '咪咕', run: searchMigu },
 ];
 
