@@ -27,27 +27,58 @@ export default function NowPlayingScreen({
   const lrcRef = useRef<ScrollViewInstance>(null);
 
   // ---- 进度条拖动 seek ----
+  // 拖动中只做本地预览（不触发播放器 seek），松手才真正跳转一次，
+  // 避免高频 seek 导致播放器排队执行、进度来回乱跳
   const trackRef = useRef<any>(null);
   const trackLayoutRef = useRef({ x: 0, width: 0 });
   const durationRef = useRef(0);
   durationRef.current = state.duration;
   const seekToRef = useRef(seekTo);
   seekToRef.current = seekTo;
+  const [dragPos, setDragPos] = useState<number | null>(null);
+  const draggingRef = useRef(false);
 
-  const handleSeekGesture = (moveX: number) => {
+  const ratioFromX = (moveX: number): number => {
     const { x, width } = trackLayoutRef.current;
+    if (!width) return 0;
+    return Math.min(1, Math.max(0, (moveX - x) / width));
+  };
+
+  // 拖动中：更新本地预览位置
+  const handleDragPreview = (moveX: number) => {
     const duration = durationRef.current;
-    if (!width || !duration) return;
-    const ratio = Math.min(1, Math.max(0, (moveX - x) / width));
-    seekToRef.current(ratio * duration);
+    if (!duration) return;
+    setDragPos(ratioFromX(moveX) * duration);
+  };
+
+  // 松手：真正 seek 一次
+  const handleSeekCommit = (moveX: number) => {
+    const duration = durationRef.current;
+    if (!duration) return;
+    seekToRef.current(ratioFromX(moveX) * duration);
   };
 
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (_e, g) => handleSeekGesture(g.moveX),
-      onPanResponderMove: (_e, g) => handleSeekGesture(g.moveX),
+      onPanResponderGrant: (_e, g) => {
+        draggingRef.current = true;
+        handleDragPreview(g.moveX);
+      },
+      onPanResponderMove: (_e, g) => {
+        if (draggingRef.current) handleDragPreview(g.moveX);
+      },
+      onPanResponderRelease: (_e, g) => {
+        draggingRef.current = false;
+        setDragPos(null);
+        handleSeekCommit(g.moveX);
+      },
+      onPanResponderTerminate: (_e, g) => {
+        draggingRef.current = false;
+        setDragPos(null);
+        handleSeekCommit(g.moveX);
+      },
     }),
   ).current;
 
@@ -156,9 +187,9 @@ export default function NowPlayingScreen({
           )}
         </View>
 
-        {/* 进度（可拖动/点击跳转） */}
+        {/* 进度（可拖动/点击跳转）；拖动中显示预览位置，松手才 seek */}
         <View style={styles.progressRow}>
-          <Text style={styles.time}>{formatTime(state.currentTime)}</Text>
+          <Text style={styles.time}>{formatTime(dragPos ?? state.currentTime)}</Text>
           <View
             ref={trackRef}
             style={styles.progressTrack}
@@ -174,7 +205,9 @@ export default function NowPlayingScreen({
                 styles.progressFill,
                 {
                   width: `${
-                    state.duration > 0 ? Math.min(100, (state.currentTime / state.duration) * 100) : 0
+                    state.duration > 0
+                      ? Math.min(100, ((dragPos ?? state.currentTime) / state.duration) * 100)
+                      : 0
                   }%` as any,
                 },
               ]}
@@ -184,7 +217,9 @@ export default function NowPlayingScreen({
                 styles.progressThumb,
                 {
                   left: `${
-                    state.duration > 0 ? Math.min(100, (state.currentTime / state.duration) * 100) : 0
+                    state.duration > 0
+                      ? Math.min(100, ((dragPos ?? state.currentTime) / state.duration) * 100)
+                      : 0
                   }%` as any,
                 },
               ]}
