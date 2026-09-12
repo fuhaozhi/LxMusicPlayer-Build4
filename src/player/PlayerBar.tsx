@@ -1,10 +1,13 @@
 /**
  * 迷你播放条 —— 底部 Tab 上方常驻，展示当前播放歌曲，点击进入全屏播放页。
+ * 网易云红白主题：白色圆角条 + 红色播放按钮
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { usePlayer } from './PlayerContext';
 import SongArt from '../components/SongArt';
+
+const RED = '#EC4141';
 
 export default function PlayerBar({ onOpen }: { onOpen: () => void }) {
   const { state, toggle } = usePlayer();
@@ -60,11 +63,11 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#E6F7F0',
+    backgroundColor: '#FDECEC',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 4,
   },
-  toggleIcon: { fontSize: 12, color: '#00B578', marginLeft: 1 },
+  toggleIcon: { fontSize: 12, color: RED, marginLeft: 1 },
   chevron: { fontSize: 20, color: '#C0C6CC', paddingRight: 4 },
 });

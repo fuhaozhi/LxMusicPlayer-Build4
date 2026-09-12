@@ -103,7 +103,7 @@ export default function PlaylistScreen({
 
       {loading ? (
         <View style={styles.centerBox}>
-          <ActivityIndicator color="#00B578" />
+          <ActivityIndicator color="#EC4141" />
           <Text style={styles.centerHint}>正在加载歌曲…</Text>
         </View>
       ) : error ? (
@@ -140,7 +140,7 @@ export default function PlaylistScreen({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
+  container: { flex: 1, backgroundColor: '#F5F5F7' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -161,12 +161,12 @@ const styles = StyleSheet.create({
   centerError: { fontSize: 13, color: '#F53F3F', textAlign: 'center', lineHeight: 19 },
   retryBtn: {
     marginTop: 14,
-    backgroundColor: '#E6F7F0',
+    backgroundColor: '#FDECEC',
     borderRadius: 12,
     paddingHorizontal: 22,
     paddingVertical: 9,
   },
-  retryText: { fontSize: 13, color: '#00B578', fontWeight: '600' },
+  retryText: { fontSize: 13, color: '#EC4141', fontWeight: '600' },
   listContent: { paddingHorizontal: 16, paddingBottom: 20 },
   row: {
     flexDirection: 'row',
@@ -188,11 +188,11 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#E6F7F0',
+    backgroundColor: '#FDECEC',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  playBtnIcon: { fontSize: 12, color: '#00B578', marginLeft: 1 },
+  playBtnIcon: { fontSize: 12, color: '#EC4141', marginLeft: 1 },
   deleteBtn: {
     marginHorizontal: 16,
     marginBottom: 24,

@@ -215,7 +215,7 @@ export default function SearchScreen({
         ListEmptyComponent={
           searching ? (
             <View style={styles.emptyWrap}>
-              <ActivityIndicator color="#00B578" />
+              <ActivityIndicator color="#EC4141" />
               <Text style={styles.emptyHint}>正在搜索「{keyword.trim()}」…</Text>
             </View>
           ) : error ? (
@@ -306,7 +306,7 @@ export default function SearchScreen({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
+  container: { flex: 1, backgroundColor: '#F5F5F7' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 },
   backBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginRight: 2 },
   backText: { fontSize: 34, color: '#1F2329', lineHeight: 34, marginTop: -4 },
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
   },
   input: { flex: 1, fontSize: 15, color: '#1F2329', paddingVertical: 8 },
   searchBtn: {
-    backgroundColor: '#00B578',
+    backgroundColor: '#EC4141',
     borderRadius: 11,
     paddingHorizontal: 18,
     paddingVertical: 9,
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
   },
-  chipActive: { backgroundColor: '#00B578' },
+  chipActive: { backgroundColor: '#EC4141' },
   chipLabel: { fontSize: 14, color: '#5B6066', fontWeight: '600' },
   chipLabelActive: { color: '#FFFFFF' },
   resultInfo: { flexDirection: 'row', alignItems: 'center', marginTop: 16, marginBottom: 10, gap: 6 },
@@ -402,11 +402,11 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#E6F7F0',
+    backgroundColor: '#FDECEC',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  playBtnIcon: { fontSize: 13, color: '#00B578', marginLeft: 1 },
+  playBtnIcon: { fontSize: 13, color: '#EC4141', marginLeft: 1 },
   emptyWrap: { alignItems: 'center', paddingTop: 90 },
   emptyNote: { fontSize: 52, color: '#DDE3E9' },
   emptyTitle: { fontSize: 17, color: '#5B6066', fontWeight: '600', marginTop: 10, textAlign: 'center', paddingHorizontal: 20 },
@@ -434,15 +434,15 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 10,
-    backgroundColor: '#E6F7F0',
+    backgroundColor: '#FDECEC',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sheetRowIconText: { fontSize: 16, color: '#00B578' },
+  sheetRowIconText: { fontSize: 16, color: '#EC4141' },
   sheetRowMain: { flex: 1, paddingHorizontal: 10 },
   sheetRowName: { fontSize: 14, color: '#1F2329', fontWeight: '500' },
   sheetRowCount: { fontSize: 11, color: '#B4B9C0', marginTop: 2 },
-  sheetRowGo: { fontSize: 13, color: '#00B578', fontWeight: '600' },
+  sheetRowGo: { fontSize: 13, color: '#EC4141', fontWeight: '600' },
   newRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14 },
   newInput: {
     flex: 1,
@@ -455,7 +455,7 @@ const styles = StyleSheet.create({
     color: '#1F2329',
     backgroundColor: '#F7F8FA',
   },
-  newBtn: { backgroundColor: '#00B578', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
+  newBtn: { backgroundColor: '#EC4141', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10 },
   newBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   sheetCancel: { alignItems: 'center', marginTop: 14 },
   sheetCancelText: { color: '#8A9099', fontSize: 14 },

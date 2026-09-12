@@ -153,8 +153,10 @@ function App() {
   );
 }
 
+const RED = '#EC4141';
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
+  container: { flex: 1, backgroundColor: '#F5F5F7' },
   content: { flex: 1 },
   overlay: { flex: 1 },
   tabBar: {
@@ -166,9 +168,9 @@ const styles = StyleSheet.create({
   },
   tabItem: { flex: 1, alignItems: 'center' },
   capsule: { paddingHorizontal: 26, paddingVertical: 7, borderRadius: 20 },
-  capsuleActive: { backgroundColor: '#E6F7F0' },
+  capsuleActive: { backgroundColor: '#FDECEC' },
   tabLabel: { fontSize: 13, color: '#8A9099' },
-  tabLabelActive: { color: '#00B578', fontWeight: '600' },
+  tabLabelActive: { color: RED, fontWeight: '600' },
 });
 
 export default App;

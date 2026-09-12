@@ -1,11 +1,24 @@
 /**
- * 正在播放页：封面/歌词/进度/控制；歌词由当前音源脚本 getLyric 提供
- * 浅色清新风：大封面卡片 + 歌词自动滚动 + 圆角控制
+ * 正在播放页 —— 网易云手机端风格重制
+ * 左：播放模式（顺序/单曲循环/随机，图标切换）；右：播放列表（底部弹层，点击切歌）
+ * 红白主题：#EC4141 主红；封面居中大卡 + 歌词自动滚动 + 可拖动进度条 + 定时关闭
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Linking,
+  Modal,
+  PanResponder,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type ScrollViewInstance,
+} from 'react-native';
 import { formatTime, parseLrc, currentLrcIndex } from '../player/lrc';
-import { usePlayer } from '../player/PlayerContext';
+import { usePlayer, type PlayMode } from '../player/PlayerContext';
 import { lyricText, toMusicInfo } from '../sourceManager';
 import { useSourceManager } from '../sourceManager';
 import { fetchLyricByName } from '../lyricFallback';
@@ -13,6 +26,14 @@ import SongArt from '../components/SongArt';
 import type { LyricInfo } from '../lx-api/types.js';
 
 const LINE_H = 30;
+const RED = '#EC4141';
+
+/** 播放模式图标与名称 */
+const MODE_META: Record<PlayMode, { icon: string; name: string }> = {
+  order: { icon: '🔁', name: '顺序播放' },
+  single: { icon: '🔂', name: '单曲循环' },
+  random: { icon: '🔀', name: '随机播放' },
+};
 
 export default function NowPlayingScreen({
   manager,
@@ -21,16 +42,27 @@ export default function NowPlayingScreen({
   manager: ReturnType<typeof useSourceManager>;
   onBack: () => void;
 }) {
-  const { state, toggle, next, prev, seekTo, sleepRemaining, startSleepTimer, cancelSleepTimer } =
-    usePlayer();
+  const {
+    state,
+    toggle,
+    next,
+    prev,
+    seekTo,
+    sleepRemaining,
+    startSleepTimer,
+    cancelSleepTimer,
+    mode,
+    cycleMode,
+    queue,
+    play,
+  } = usePlayer();
   const [lyric, setLyric] = useState<LyricInfo | null>(null);
   const [lyricLoading, setLyricLoading] = useState(false);
   const [timerOpen, setTimerOpen] = useState(false);
+  const [listOpen, setListOpen] = useState(false);
   const lrcRef = useRef<ScrollViewInstance>(null);
 
-  // ---- 进度条拖动 seek ----
-  // 拖动中只做本地预览（不触发播放器 seek），松手才真正跳转一次，
-  // 避免高频 seek 导致播放器排队执行、进度来回乱跳
+  // ---- 进度条拖动 seek（拖动只预览，松手才提交一次） ----
   const trackRef = useRef<any>(null);
   const trackLayoutRef = useRef({ x: 0, width: 0 });
   const durationRef = useRef(0);
@@ -46,14 +78,12 @@ export default function NowPlayingScreen({
     return Math.min(1, Math.max(0, (moveX - x) / width));
   };
 
-  // 拖动中：更新本地预览位置
   const handleDragPreview = (moveX: number) => {
     const duration = durationRef.current;
     if (!duration) return;
     setDragPos(ratioFromX(moveX) * duration);
   };
 
-  // 松手：真正 seek 一次
   const handleSeekCommit = (moveX: number) => {
     const duration = durationRef.current;
     if (!duration) return;
@@ -86,7 +116,7 @@ export default function NowPlayingScreen({
 
   const song = state.song;
 
-  // 播放中的歌曲变化时拉歌词：优先音源脚本（有 lyric 能力时），否则用网易云兜底
+  // 播放中的歌曲变化时拉歌词
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     setLyric(null);
@@ -121,7 +151,6 @@ export default function NowPlayingScreen({
   const lrc = useMemo(() => parseLrc(lyricText(lyric)), [lyric]);
   const currentIdx = currentLrcIndex(lrc, state.currentTime);
 
-  // 歌词自动滚动到当前行
   useEffect(() => {
     if (currentIdx >= 0) {
       lrcRef.current?.scrollTo({ y: Math.max(0, currentIdx * LINE_H - 80), animated: true });
@@ -139,23 +168,36 @@ export default function NowPlayingScreen({
   }
 
   const openExternal = () => {
-    if (state.url) {
-      Linking.openURL(state.url).catch(() => {});
-    }
+    if (state.url) Linking.openURL(state.url).catch(() => {});
   };
+
+  const modeMeta = MODE_META[mode];
 
   return (
     <View style={styles.container}>
+      {/* 顶栏：返回 | 歌名 | 定时关闭 */}
       <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.backBtn} hitSlop={8}>
-          <Text style={styles.backText}>‹</Text>
+        <Pressable onPress={onBack} style={styles.headerBtn} hitSlop={8}>
+          <Text style={styles.headerIcon}>‹</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>正在播放</Text>
-      </View>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.coverShadow}>
-          <SongArt song={song} size={236} radius={22} />
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
+            {song.name}
+          </Text>
         </View>
+        <Pressable style={styles.headerBtn} onPress={() => setTimerOpen(true)} hitSlop={8}>
+          <Text style={[styles.headerIconSmall, sleepRemaining > 0 && styles.timerActive]}>⏱</Text>
+        </Pressable>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* 封面 */}
+        <View style={styles.coverWrap}>
+          <View style={styles.coverShadow}>
+            <SongArt song={song} size={250} radius={18} />
+          </View>
+        </View>
+
         <Text style={styles.title} numberOfLines={1}>
           {song.name}
         </Text>
@@ -166,7 +208,7 @@ export default function NowPlayingScreen({
         {/* 歌词卡片 */}
         <View style={styles.lyricCard}>
           {lyricLoading ? (
-            <ActivityIndicator style={styles.lyricLoading} color="#00B578" />
+            <ActivityIndicator style={styles.lyricLoading} color={RED} />
           ) : lrc.length ? (
             <ScrollView
               ref={lrcRef}
@@ -189,7 +231,7 @@ export default function NowPlayingScreen({
           )}
         </View>
 
-        {/* 进度（可拖动/点击跳转）；拖动中显示预览位置，松手才 seek */}
+        {/* 进度 */}
         <View style={styles.progressRow}>
           <Text style={styles.time}>{formatTime(dragPos ?? state.currentTime)}</Text>
           <View
@@ -230,30 +272,36 @@ export default function NowPlayingScreen({
           <Text style={styles.time}>{formatTime(state.duration)}</Text>
         </View>
 
-        {/* 控制 */}
-        <View style={styles.controls}>
-          <Pressable onPress={prev} style={styles.ctrlBtn} hitSlop={8}>
-            <Text style={styles.ctrlIcon}>◁◁</Text>
+        {/* 控制区：左模式 / 中播放控制 / 右播放列表 */}
+        <View style={styles.controlsRow}>
+          {/* 播放模式（左） */}
+          <Pressable style={styles.sideBtn} onPress={cycleMode} hitSlop={8}>
+            <Text style={styles.sideBtnIcon}>{modeMeta.icon}</Text>
+            <Text style={styles.sideBtnText}>{modeMeta.name}</Text>
           </Pressable>
-          <Pressable onPress={toggle} style={[styles.ctrlBtn, styles.playBtn]} hitSlop={8}>
-            {state.buffering ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={[styles.ctrlIcon, styles.playIcon]}>{state.paused ? '▶' : '❚❚'}</Text>
-            )}
-          </Pressable>
-          <Pressable onPress={next} style={styles.ctrlBtn} hitSlop={8}>
-            <Text style={styles.ctrlIcon}>▷▷</Text>
+
+          <View style={styles.controls}>
+            <Pressable onPress={prev} style={styles.ctrlBtn} hitSlop={8}>
+              <Text style={styles.ctrlIcon}>◁◁</Text>
+            </Pressable>
+            <Pressable onPress={toggle} style={[styles.ctrlBtn, styles.playBtn]} hitSlop={8}>
+              {state.buffering ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={[styles.ctrlIcon, styles.playIcon]}>{state.paused ? '▶' : '❚❚'}</Text>
+              )}
+            </Pressable>
+            <Pressable onPress={next} style={styles.ctrlBtn} hitSlop={8}>
+              <Text style={styles.ctrlIcon}>▷▷</Text>
+            </Pressable>
+          </View>
+
+          {/* 播放列表（右） */}
+          <Pressable style={styles.sideBtn} onPress={() => setListOpen(true)} hitSlop={8}>
+            <Text style={styles.sideBtnIcon}>☰</Text>
+            <Text style={styles.sideBtnText}>列表</Text>
           </Pressable>
         </View>
-
-        {/* 定时关闭 */}
-        <Pressable style={styles.timerRow} onPress={() => setTimerOpen(true)} hitSlop={8}>
-          <Text style={[styles.timerIcon, sleepRemaining > 0 && styles.timerActive]}>⏱</Text>
-          <Text style={[styles.timerText, sleepRemaining > 0 && styles.timerActive]}>
-            {sleepRemaining > 0 ? `定时关闭 · ${formatTime(sleepRemaining)}` : '定时关闭'}
-          </Text>
-        </Pressable>
 
         {state.error ? (
           <View style={styles.errorBox}>
@@ -305,36 +353,89 @@ export default function NowPlayingScreen({
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* 播放列表弹层 */}
+      <Modal visible={listOpen} transparent animationType="slide" onRequestClose={() => setListOpen(false)}>
+        <Pressable style={styles.mask} onPress={() => setListOpen(false)}>
+          <View style={styles.listSheet}>
+            <View style={styles.listHandle} />
+            <Text style={styles.listTitle}>播放列表（{queue.length} 首）</Text>
+            <FlatList
+              data={queue}
+              keyExtractor={(s, i) => `${s.source}-${s.id}-${i}`}
+              style={styles.listBody}
+              renderItem={({ item: s, index }) => {
+                const isCurrent =
+                  state.song && s.source === state.song.source && s.id === state.song.id;
+                return (
+                  <Pressable
+                    style={styles.listRow}
+                    onPress={() => {
+                      setListOpen(false);
+                      void play(s, manager.getApi(), queue);
+                    }}
+                  >
+                    <Text style={[styles.listIndex, isCurrent && styles.listCurrent]}>
+                      {isCurrent ? '♪' : index + 1}
+                    </Text>
+                    <View style={styles.listMain}>
+                      <Text
+                        style={[styles.listName, isCurrent && styles.listCurrent]}
+                        numberOfLines={1}
+                      >
+                        {s.name}
+                      </Text>
+                      <Text style={styles.listSinger} numberOfLines={1}>
+                        {s.singer}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              }}
+            />
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 2 },
-  backBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginRight: 2 },
-  backText: { fontSize: 34, color: '#1F2329', lineHeight: 34, marginTop: -4 },
-  headerTitle: { fontSize: 24, fontWeight: '700', color: '#1F2329' },
-  content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30, alignItems: 'center' },
-  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F6F8' },
+  container: { flex: 1, backgroundColor: '#F5F5F7' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 6,
+  },
+  headerBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  headerIcon: { fontSize: 36, color: '#1F2329', lineHeight: 36, marginTop: -4 },
+  headerIconSmall: { fontSize: 19, color: '#1F2329' },
+  timerActive: { color: RED },
+  headerCenter: { flex: 1, alignItems: 'center', paddingHorizontal: 8 },
+  headerTitle: { fontSize: 16, fontWeight: '600', color: '#1F2329' },
+  content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 34, alignItems: 'center' },
+  emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F5F5F7' },
   emptyNote: { fontSize: 56, color: '#DDE3E9' },
   emptyTitle: { fontSize: 17, color: '#5B6066', fontWeight: '600', marginTop: 10 },
   emptyHint: { fontSize: 13, color: '#B4B9C0', marginTop: 6 },
+  coverWrap: { marginTop: 6 },
   coverShadow: {
     shadowColor: '#0A2540',
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5,
   },
-  title: { fontSize: 19, fontWeight: '700', color: '#1F2329', marginTop: 18, maxWidth: '100%' },
+  title: { fontSize: 20, fontWeight: '700', color: '#1F2329', marginTop: 18, maxWidth: '100%' },
   singer: { fontSize: 13, color: '#8A9099', marginTop: 5 },
   lyricCard: {
     width: '100%',
-    height: 240,
+    height: 230,
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    marginTop: 18,
+    borderRadius: 16,
+    marginTop: 16,
     overflow: 'hidden',
     shadowColor: '#0A2540',
     shadowOpacity: 0.05,
@@ -352,17 +453,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 16,
   },
-  lrcActive: { color: '#00B578', fontWeight: '700', fontSize: 15 },
+  lrcActive: { color: RED, fontWeight: '700', fontSize: 15 },
   lrcEmpty: { color: '#B4B9C0', fontSize: 13, textAlign: 'center', marginTop: 24 },
-  progressRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 18, gap: 8 },
+  progressRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 16, gap: 8 },
   time: { fontSize: 11, color: '#B4B9C0', fontVariant: ['tabular-nums'] },
-  progressTrack: {
-    flex: 1,
-    height: 18,
-    justifyContent: 'center',
-    marginHorizontal: 2,
-  },
-  progressFill: { height: 4, borderRadius: 2, backgroundColor: '#00B578' },
+  progressTrack: { flex: 1, height: 18, justifyContent: 'center', marginHorizontal: 2 },
+  progressFill: { height: 4, borderRadius: 2, backgroundColor: RED },
   progressThumb: {
     position: 'absolute',
     top: 5,
@@ -370,13 +466,29 @@ const styles = StyleSheet.create({
     height: 8,
     marginLeft: -4,
     borderRadius: 4,
-    backgroundColor: '#00B578',
+    backgroundColor: RED,
   },
-  controls: { flexDirection: 'row', alignItems: 'center', marginTop: 20, gap: 34 },
-  timerRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, paddingHorizontal: 12, paddingVertical: 8 },
-  timerIcon: { fontSize: 15, color: '#8A9099', marginRight: 6 },
-  timerText: { fontSize: 13, color: '#8A9099' },
-  timerActive: { color: '#00B578' },
+  controlsRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginTop: 14 },
+  sideBtn: { width: 62, alignItems: 'center', paddingVertical: 4 },
+  sideBtnIcon: { fontSize: 17 },
+  sideBtnText: { fontSize: 10, color: '#8A9099', marginTop: 2 },
+  controls: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 26 },
+  ctrlBtn: { padding: 6 },
+  ctrlIcon: { fontSize: 22, color: '#1F2329' },
+  playBtn: {
+    backgroundColor: RED,
+    borderRadius: 30,
+    width: 58,
+    height: 58,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: RED,
+    shadowOpacity: 0.32,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  playIcon: { fontSize: 23, color: '#fff' },
   mask: { flex: 1, backgroundColor: 'rgba(20,24,28,0.4)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#FFFFFF',
@@ -401,24 +513,44 @@ const styles = StyleSheet.create({
   sheetCancelRow: { justifyContent: 'center', marginTop: 4 },
   sheetCancelText: { fontSize: 14, color: '#F53F3F', textAlign: 'center' },
   sheetClose: { fontSize: 14, color: '#8A9099', textAlign: 'center' },
-  ctrlBtn: { padding: 8 },
-  ctrlIcon: { fontSize: 22, color: '#00B578' },
-  playBtn: {
-    backgroundColor: '#00B578',
-    borderRadius: 30,
-    width: 60,
-    height: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#00B578',
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+  listSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '72%',
+    paddingBottom: 24,
   },
-  playIcon: { fontSize: 24, color: '#fff' },
+  listHandle: {
+    alignSelf: 'center',
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E5E7EB',
+    marginTop: 8,
+  },
+  listTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1F2329',
+    textAlign: 'center',
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  listBody: { paddingHorizontal: 16 },
+  listRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 11,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#F0F2F5',
+  },
+  listIndex: { width: 30, fontSize: 14, color: '#C0C6CC', textAlign: 'center' },
+  listCurrent: { color: RED, fontWeight: '700' },
+  listMain: { flex: 1, paddingLeft: 8 },
+  listName: { fontSize: 15, color: '#1F2329' },
+  listSinger: { fontSize: 12, color: '#8A9099', marginTop: 2 },
   errorBox: {
-    marginTop: 20,
+    marginTop: 18,
     alignItems: 'center',
     padding: 12,
     backgroundColor: '#FFF1F0',
@@ -426,5 +558,5 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   errorText: { color: '#F53F3F', fontSize: 12, textAlign: 'center', lineHeight: 17 },
-  external: { color: '#00B578', fontSize: 13, marginTop: 8, textDecorationLine: 'underline' },
+  external: { color: RED, fontSize: 13, marginTop: 8, textDecorationLine: 'underline' },
 });

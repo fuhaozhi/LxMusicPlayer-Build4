@@ -1,5 +1,5 @@
 /**
- * 我的 —— 最近播放、自建歌单、收藏歌单、听歌报告、设置入口，浅色清新风。
+ * 我的 —— 网易云风格：红色渐变头部 + 听歌统计 + 最近播放 / 自建歌单 / 收藏歌单 / 设置
  */
 import React, { useState } from 'react';
 import {
@@ -16,6 +16,9 @@ import { useLibrary } from '../library';
 import SongArt from '../components/SongArt';
 import type { LxMusicApi } from '../lx-api/index.js';
 import type { Collection, LocalPlaylist, Song } from '../types';
+
+const RED = '#EC4141';
+const RED_DEEP = '#C62F2F';
 
 function fmtDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -70,112 +73,118 @@ export default function MineScreen({
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <View style={styles.top}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>♪</Text>
+    <View style={styles.container}>
+      {/* 红色渐变头部 */}
+      <View style={styles.header}>
+        <View style={styles.headerDecoA} />
+        <View style={styles.headerDecoB} />
+        <View style={styles.top}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>♪</Text>
+          </View>
+          <View style={styles.topMain}>
+            <Text style={styles.title}>我的音乐</Text>
+            <Text style={styles.subtitle}>本地播放 · 数据保存在本机</Text>
+          </View>
         </View>
-        <View style={styles.topMain}>
-          <Text style={styles.title}>我的音乐</Text>
-          <Text style={styles.subtitle}>本地播放 · 数据保存在本机</Text>
-        </View>
-      </View>
-
-      {/* 听歌报告入口 */}
-      <Pressable style={styles.reportCard} onPress={onOpenReport}>
-        <View style={styles.reportItem}>
-          <Text style={styles.reportNum}>{stats.totalPlays}</Text>
-          <Text style={styles.reportLabel}>播放次数</Text>
-        </View>
-        <View style={styles.reportDivider} />
-        <View style={styles.reportItem}>
-          <Text style={styles.reportNum}>{fmtDuration(stats.totalSeconds).split(' ')[0]}</Text>
-          <Text style={styles.reportLabel}>累计时长</Text>
-        </View>
-        <View style={styles.reportDivider} />
-        <View style={styles.reportItem}>
-          <Text style={styles.reportNum} numberOfLines={1}>
-            {topSong ? topSong.name.slice(0, 4) : '—'}
-          </Text>
-          <Text style={styles.reportLabel}>最爱单曲</Text>
-        </View>
-        <Text style={styles.reportGo}>›</Text>
-      </Pressable>
-
-      {/* 最近播放 */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>最近播放</Text>
-      </View>
-      {recents.length === 0 ? (
-        <Text style={styles.sectionEmpty}>还没有播放记录，去搜索或音乐馆听听看</Text>
-      ) : (
-        recents.slice(0, 6).map(song => (
-          <RecentsRow
-            key={`${song.source}:${song.id}`}
-            song={song}
-            onPlay={() => play(song, getApi(), recents.slice(0, 20))}
-          />
-        ))
-      )}
-
-      {/* 我的歌单 */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>自建歌单</Text>
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hscroll}>
-        <Pressable style={[styles.hCard, styles.createCard]} onPress={() => setCreating(true)}>
-          <Text style={styles.createPlus}>＋</Text>
-          <Text style={styles.createText}>新建歌单</Text>
-        </Pressable>
-        {playlists.map(pl => (
-          <Pressable key={pl.id} style={styles.hCard} onPress={() => onOpenLocalPlaylist(pl)}>
-            <View style={styles.hCover}>
-              <Text style={styles.hCoverNote}>♪</Text>
-              <Text style={styles.hCount}>{pl.songs.length} 首</Text>
-            </View>
-            <Text style={styles.hName} numberOfLines={1}>
-              {pl.name}
+        {/* 听歌报告入口 */}
+        <Pressable style={styles.reportCard} onPress={onOpenReport}>
+          <View style={styles.reportItem}>
+            <Text style={styles.reportNum}>{stats.totalPlays}</Text>
+            <Text style={styles.reportLabel}>播放次数</Text>
+          </View>
+          <View style={styles.reportDivider} />
+          <View style={styles.reportItem}>
+            <Text style={styles.reportNum}>{fmtDuration(stats.totalSeconds).split(' ')[0]}</Text>
+            <Text style={styles.reportLabel}>累计时长</Text>
+          </View>
+          <View style={styles.reportDivider} />
+          <View style={styles.reportItem}>
+            <Text style={styles.reportNum} numberOfLines={1}>
+              {topSong ? topSong.name.slice(0, 4) : '—'}
             </Text>
-          </Pressable>
-        ))}
-        {playlists.length === 0 ? <Text style={styles.hint}>点「新建歌单」，在搜索页点 ＋ 加歌</Text> : null}
-      </ScrollView>
-
-      {/* 收藏歌单 */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>收藏歌单</Text>
+            <Text style={styles.reportLabel}>最爱单曲</Text>
+          </View>
+          <Text style={styles.reportGo}>›</Text>
+        </Pressable>
       </View>
-      {favs.length === 0 ? (
-        <Text style={styles.sectionEmpty}>在音乐馆 / 每日推荐的合集页点「收藏」即可保存</Text>
-      ) : (
+
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* 最近播放 */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>最近播放</Text>
+        </View>
+        {recents.length === 0 ? (
+          <Text style={styles.sectionEmpty}>还没有播放记录，去搜索或音乐馆听听看</Text>
+        ) : (
+          recents.slice(0, 6).map(song => (
+            <RecentsRow
+              key={`${song.source}:${song.id}`}
+              song={song}
+              onPlay={() => play(song, getApi(), recents.slice(0, 20))}
+            />
+          ))
+        )}
+
+        {/* 我的歌单 */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>自建歌单</Text>
+        </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hscroll}>
-          {favs.map(f => (
-            <Pressable
-              key={f.id}
-              style={styles.hCard}
-              onPress={() =>
-                onOpenCollection({ id: f.id, name: f.name, desc: f.desc, source: f.source, apiId: f.apiId, hue: f.hue })
-              }
-            >
-              <View style={[styles.hCover, { backgroundColor: `hsl(${f.hue}, 70%, 90%)` }]}>
-                <Text style={[styles.hCoverNote, { color: `hsl(${f.hue}, 55%, 40%)` }]}>♪</Text>
+          <Pressable style={[styles.hCard, styles.createCard]} onPress={() => setCreating(true)}>
+            <Text style={styles.createPlus}>＋</Text>
+            <Text style={styles.createText}>新建歌单</Text>
+          </Pressable>
+          {playlists.map(pl => (
+            <Pressable key={pl.id} style={styles.hCard} onPress={() => onOpenLocalPlaylist(pl)}>
+              <View style={styles.hCover}>
+                <Text style={styles.hCoverNote}>♪</Text>
+                <Text style={styles.hCount}>{pl.songs.length} 首</Text>
               </View>
               <Text style={styles.hName} numberOfLines={1}>
-                {f.name}
+                {pl.name}
               </Text>
             </Pressable>
           ))}
+          {playlists.length === 0 ? <Text style={styles.hint}>点「新建歌单」，在搜索页点 ＋ 加歌</Text> : null}
         </ScrollView>
-      )}
 
-      {/* 设置入口 */}
-      <Pressable style={styles.settingsRow} onPress={onOpenSettings}>
-        <View style={styles.settingsIcon}>
-          <Text style={styles.settingsIconText}>⚙</Text>
+        {/* 收藏歌单 */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>收藏歌单</Text>
         </View>
-        <Text style={styles.settingsText}>设置 · 音源管理</Text>
-        <Text style={styles.settingsGo}>›</Text>
-      </Pressable>
+        {favs.length === 0 ? (
+          <Text style={styles.sectionEmpty}>在音乐馆 / 每日推荐的合集页点「收藏」即可保存</Text>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hscroll}>
+            {favs.map(f => (
+              <Pressable
+                key={f.id}
+                style={styles.hCard}
+                onPress={() =>
+                  onOpenCollection({ id: f.id, name: f.name, desc: f.desc, source: f.source, apiId: f.apiId, hue: f.hue })
+                }
+              >
+                <View style={[styles.hCover, { backgroundColor: `hsl(${f.hue}, 70%, 92%)` }]}>
+                  <Text style={[styles.hCoverNote, { color: `hsl(${f.hue}, 55%, 40%)` }]}>♪</Text>
+                </View>
+                <Text style={styles.hName} numberOfLines={1}>
+                  {f.name}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        )}
+
+        {/* 设置入口 */}
+        <Pressable style={styles.settingsRow} onPress={onOpenSettings}>
+          <View style={styles.settingsIcon}>
+            <Text style={styles.settingsIconText}>⚙</Text>
+          </View>
+          <Text style={styles.settingsText}>设置 · 音源管理</Text>
+          <Text style={styles.settingsGo}>›</Text>
+        </Pressable>
+      </ScrollView>
 
       {/* 新建歌单弹窗 */}
       <Modal visible={creating} transparent animationType="fade" onRequestClose={() => setCreating(false)}>
@@ -199,46 +208,67 @@ export default function MineScreen({
           </Pressable>
         </Pressable>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
-  content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 },
-  top: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  container: { flex: 1, backgroundColor: '#F5F5F7' },
+  header: {
+    backgroundColor: RED_DEEP,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 0,
+    overflow: 'hidden',
+  },
+  headerDecoA: {
+    position: 'absolute',
+    top: -70,
+    right: -30,
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  headerDecoB: {
+    position: 'absolute',
+    bottom: -80,
+    left: -40,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+  },
+  top: { flexDirection: 'row', alignItems: 'center', marginBottom: 14 },
   avatar: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: '#E6F7F0',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.22)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { fontSize: 24, color: '#00B578' },
+  avatarText: { fontSize: 25, color: '#FFFFFF' },
   topMain: { paddingLeft: 12 },
-  title: { fontSize: 22, fontWeight: '800', color: '#1F2329' },
-  subtitle: { fontSize: 12, color: '#8A9099', marginTop: 3 },
+  title: { fontSize: 21, fontWeight: '800', color: '#FFFFFF' },
+  subtitle: { fontSize: 11, color: 'rgba(255,255,255,0.72)', marginTop: 3 },
   reportCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.16)',
     borderRadius: 16,
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    shadowColor: '#0A2540',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    paddingVertical: 13,
+    paddingHorizontal: 10,
+    marginBottom: 16,
   },
   reportItem: { flex: 1, alignItems: 'center', minWidth: 0 },
-  reportNum: { fontSize: 17, fontWeight: '700', color: '#1F2329', maxWidth: '100%' },
-  reportLabel: { fontSize: 11, color: '#B4B9C0', marginTop: 3 },
-  reportDivider: { width: StyleSheet.hairlineWidth, height: 26, backgroundColor: '#EDEFF2' },
-  reportGo: { fontSize: 22, color: '#C0C6CC', paddingLeft: 8 },
-  sectionHeader: { marginTop: 22, marginBottom: 10 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1F2329' },
+  reportNum: { fontSize: 16, fontWeight: '800', color: '#FFFFFF', maxWidth: '100%' },
+  reportLabel: { fontSize: 10, color: 'rgba(255,255,255,0.72)', marginTop: 3 },
+  reportDivider: { width: StyleSheet.hairlineWidth, height: 24, backgroundColor: 'rgba(255,255,255,0.25)' },
+  reportGo: { fontSize: 20, color: 'rgba(255,255,255,0.7)', paddingLeft: 8 },
+  content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 },
+  sectionHeader: { marginTop: 20, marginBottom: 10 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#1F2329' },
   sectionEmpty: { fontSize: 13, color: '#B4B9C0', paddingVertical: 6 },
   recentRow: {
     flexDirection: 'row',
@@ -260,11 +290,11 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#E6F7F0',
+    backgroundColor: '#FDECEC',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  recentPlayIcon: { fontSize: 12, color: '#00B578', marginLeft: 1 },
+  recentPlayIcon: { fontSize: 12, color: RED, marginLeft: 1 },
   hscroll: { marginHorizontal: -16, paddingHorizontal: 16 },
   hCard: { width: 108, marginRight: 12, alignItems: 'flex-start' },
   createCard: {
@@ -273,18 +303,18 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1.5,
     borderStyle: 'dashed',
-    borderColor: '#C9D4CC',
+    borderColor: '#E5B4B4',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FBFCFC',
   },
-  createPlus: { fontSize: 26, color: '#00B578', lineHeight: 30 },
+  createPlus: { fontSize: 26, color: RED, lineHeight: 30 },
   createText: { fontSize: 12, color: '#8A9099', marginTop: 4 },
   hCover: {
     width: 108,
     height: 108,
     borderRadius: 16,
-    backgroundColor: '#E6F7F0',
+    backgroundColor: '#FDECEC',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#0A2540',
@@ -293,7 +323,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
   },
-  hCoverNote: { fontSize: 34, color: '#00B578', opacity: 0.5 },
+  hCoverNote: { fontSize: 34, color: RED, opacity: 0.5 },
   hCount: { position: 'absolute', left: 8, bottom: 8, fontSize: 11, color: '#5B6066' },
   hName: { fontSize: 12, color: '#1F2329', fontWeight: '500', marginTop: 7, maxWidth: 108 },
   hint: { fontSize: 12, color: '#B4B9C0', alignSelf: 'center', paddingVertical: 20 },
@@ -315,11 +345,11 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 10,
-    backgroundColor: '#F0F2F5',
+    backgroundColor: '#FDECEC',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  settingsIconText: { fontSize: 17, color: '#5B6066' },
+  settingsIconText: { fontSize: 17, color: RED },
   settingsText: { flex: 1, fontSize: 15, color: '#1F2329', fontWeight: '500', paddingLeft: 12 },
   settingsGo: { fontSize: 22, color: '#C0C6CC' },
   mask: { flex: 1, backgroundColor: 'rgba(20,24,28,0.4)', justifyContent: 'center', paddingHorizontal: 40 },
@@ -341,7 +371,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7F8FA',
   },
   sheetBtn: {
-    backgroundColor: '#00B578',
+    backgroundColor: RED,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',

@@ -67,7 +67,7 @@ export default function SourceScreen({ manager }: { manager: ReturnType<typeof u
               </View>
               <View style={styles.stateArea}>
                 {item.state === 'loading' ? (
-                  <ActivityIndicator size="small" color="#00B578" />
+                  <ActivityIndicator size="small" color="#EC4141" />
                 ) : (
                   <Text
                     style={[
@@ -89,19 +89,19 @@ export default function SourceScreen({ manager }: { manager: ReturnType<typeof u
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
+  container: { flex: 1, backgroundColor: '#F5F5F7' },
   header: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 8 },
   title: { fontSize: 30, fontWeight: '700', color: '#1F2329', marginBottom: 6 },
   subtitle: { fontSize: 13, color: '#8A9099', lineHeight: 19 },
   messageBox: {
     marginHorizontal: 16,
     marginBottom: 8,
-    backgroundColor: '#FFF4E6',
+    backgroundColor: '#FDECEC',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  messageText: { fontSize: 12, color: '#B76E00', lineHeight: 17 },
+  messageText: { fontSize: 12, color: '#C62F2F', lineHeight: 17 },
   listContent: { paddingHorizontal: 16, paddingBottom: 24 },
   card: {
     flexDirection: 'row',
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  cardActive: { borderColor: '#00B578' },
+  cardActive: { borderColor: '#EC4141' },
   cardLoading: { opacity: 0.6 },
   iconCircle: {
     width: 44,
@@ -128,25 +128,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconCircleActive: { backgroundColor: '#E6F7F0' },
+  iconCircleActive: { backgroundColor: '#FDECEC' },
   iconText: { fontSize: 18, color: '#8A9099', fontWeight: '600' },
-  iconTextActive: { color: '#00B578' },
+  iconTextActive: { color: '#EC4141' },
   cardMain: { flex: 1, paddingHorizontal: 12 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   name: { fontSize: 16, color: '#1F2329', fontWeight: '600', flexShrink: 1 },
-  nameActive: { color: '#00B578' },
+  nameActive: { color: '#EC4141' },
   badge: {
-    backgroundColor: '#E6F7F0',
+    backgroundColor: '#FDECEC',
     borderRadius: 8,
     paddingHorizontal: 7,
     paddingVertical: 2,
   },
-  badgeText: { fontSize: 10, color: '#00B578', fontWeight: '600' },
+  badgeText: { fontSize: 10, color: '#EC4141', fontWeight: '600' },
   url: { fontSize: 11, color: '#B4B9C0', marginTop: 3 },
   cap: { fontSize: 11, color: '#5B6066', marginTop: 4 },
   error: { fontSize: 11, color: '#F53F3F', marginTop: 4, lineHeight: 15 },
   stateArea: { alignItems: 'flex-end', alignSelf: 'stretch', justifyContent: 'center', minWidth: 54 },
   stateText: { fontSize: 12, color: '#B4B9C0' },
-  stateReady: { color: '#00B578', fontWeight: '600' },
+  stateReady: { color: '#EC4141', fontWeight: '600' },
   stateError: { color: '#F53F3F' },
 });

@@ -47,8 +47,8 @@ async function fetchJson(url: string, headers: Record<string, string> = {}): Pro
   }
 }
 
-/** 酷我音乐搜索 */
-async function searchKuwo(kw: string): Promise<Song[]> {
+/** 酷我音乐搜索（官方接口；播放走官方直链 antiserver.kuwo.cn，不依赖音源脚本） */
+export async function searchKuwo(kw: string): Promise<Song[]> {
   const url = `https://search.kuwo.cn/r.s?all=${encodeURIComponent(kw)}&ft=music&itemset=web_2013&pn=0&rn=50&rformat=json&encoding=utf8`;
   const data = await fetchJson(url, { Referer: 'https://www.kuwo.cn/' });
   const list: any[] = data?.abslist ?? data?.ABSLIST ?? [];
@@ -100,15 +100,17 @@ async function searchKuGou(kw: string): Promise<Song[]> {
     .filter((it: any) => it?.FileHash)
     .map((it: any) => {
       const hash = String(it.FileHash);
+      // 封面：官方返回 http://imge.kugou.com/stdmusic/{size}/...jpg，占位符 {size} 需替换为具体尺寸
+      const rawPic = it.Image ? String(it.Image).replace('{size}', '300') : '';
       return {
         source: 'kg',
         id: hash,
         hash,
-        name: String(it.SongName ?? it.SongName ?? ''),
+        name: String(it.SongName ?? ''),
         singer: String(it.SingerName ?? ''),
         album: it.AlbumName ? String(it.AlbumName) : undefined,
         interval: Number(it.Duration ?? 0) || undefined,
-        pic: `https://imgessl.kugou.com/stdmusic/250/${hash}.jpg`,
+        pic: rawPic ? rawPic.replace(/^http:\/\//, 'https://') : undefined,
       };
     });
 }
@@ -131,35 +133,12 @@ export async function searchNetease(kw: string): Promise<Song[]> {
     }));
 }
 
-/** 咪咕音乐搜索（官方网页搜索接口已下线，保留调用；失败由上层提示切换接口） */
-async function searchMigu(kw: string): Promise<Song[]> {
-  const url = `https://music.migu.cn/v3/api/search/v3?keyword=${encodeURIComponent(kw)}&pgc=1&rows=50&type=2`;
-  const data = await fetchJson(url, {
-    'User-Agent':
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
-  });
-  const list: any[] = data?.songs ?? [];
-  return list
-    .filter((it: any) => it?.id)
-    .map((it: any) => ({
-      source: 'mg',
-      id: String(it.id),
-      copyrightId: String(it.copyrightId ?? it.id),
-      name: String(it.title ?? ''),
-      singer: (it.singer ?? []).map((s: any) => s?.name ?? '').join(' / '),
-      album: it.album?.name ? String(it.album.name) : undefined,
-      interval: Number(it.length ?? 0) || undefined,
-      pic: it.album?.imgs?.[0]?.url ? String(it.album.imgs[0].url) : undefined,
-    }));
-}
-
-/** 搜索接口选择列表（音源脚本 qdy 支持 kw/kg/tx/wy/mg 取链，可播可搜） */
+/** 搜索接口选择列表：酷我（官方直链自足，播放最稳）置顶；酷狗/QQ/网易取链失败会自动用酷我同名兜底播放 */
 export const SEARCH_PICKER: { id: string; label: string; run: (kw: string) => Promise<Song[]> }[] = [
   { id: 'kw', label: '酷我', run: searchKuwo },
   { id: 'kg', label: '酷狗', run: searchKuGou },
   { id: 'tx', label: 'QQ', run: searchTencent },
   { id: 'wy', label: '网易', run: searchNetease },
-  { id: 'mg', label: '咪咕', run: searchMigu },
 ];
 
 /** 全部搜索源（兼容旧调用），按顺序尝试；网易排最前（取链实测稳定，避免用户点到放不了的源） */

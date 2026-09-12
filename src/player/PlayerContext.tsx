@@ -1,9 +1,9 @@
 /**
  * 播放器上下文 —— react-native-video 播放 + 音源脚本取链（lx-ios-api）。
- * 取链策略：当前音源脚本支持该 source 时用脚本取 musicUrl（320k 失败降级 128k）；
- * 不支持时抛明确错误提示换音源。
- * 附加能力：进度 seek（拖动/锁屏）、锁屏「正在播放」卡片与远程控制（原生 LxNowPlaying）、
- * 上次播放缓存（自动续播）。
+ * 取链策略：酷我歌曲直接走官方直链（antiserver.kuwo.cn，不依赖音源脚本）；
+ * 其余源优先音源脚本取链，失败自动用酷我同名歌曲兜底播放（保证一定能播）。
+ * 播放模式：顺序播放 / 单曲循环 / 随机播放（持久化）。
+ * 附加能力：进度 seek、锁屏「正在播放」与远程控制、上次播放缓存自动续播、定时关闭。
  */
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeModules } from 'react-native';
@@ -13,9 +13,12 @@ import type { PlayerState, Song } from '../types';
 import { toMusicInfo } from '../sourceManager';
 import { useLibrary } from '../library';
 import { resolveCover } from '../cover';
-import { searchNetease } from '../searchSources';
+import { searchKuwo } from '../searchSources';
 import { KEYS, load, save } from '../storage';
 import { formatTime } from './lrc';
+
+/** 播放模式：order=顺序循环 / single=单曲循环 / random=随机播放 */
+export type PlayMode = 'order' | 'single' | 'random';
 
 interface PlayerContextValue {
   state: PlayerState;
@@ -29,6 +32,15 @@ interface PlayerContextValue {
   setCurrentTime: (t: number) => void;
   /** 恢复上次播放（App 启动、音源加载完成后调用） */
   restoreLast: (api: LxMusicApi | null) => Promise<void>;
+  /** 定时关闭：剩余秒数（0 表示未开启） */
+  sleepRemaining: number;
+  /** 开启/调整定时关闭（分钟）；<=0 为取消 */
+  startSleepTimer: (minutes: number) => void;
+  cancelSleepTimer: () => void;
+  /** 当前播放模式 */
+  mode: PlayMode;
+  /** 循环切换播放模式：顺序 → 单曲 → 随机 → 顺序 */
+  cycleMode: () => void;
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
@@ -65,25 +77,6 @@ const NowPlayingNative = NativeModules?.LxNowPlaying as
     }
   | undefined;
 
-interface PlayerContextValue {
-  state: PlayerState;
-  queue: Song[];
-  play: (song: Song, api: LxMusicApi | null, queue?: Song[]) => Promise<void>;
-  toggle: () => void;
-  next: () => void;
-  prev: () => void;
-  /** 跳转到指定秒数（进度条拖动 / 锁屏拖动） */
-  seekTo: (t: number) => void;
-  setCurrentTime: (t: number) => void;
-  /** 恢复上次播放（App 启动、音源加载完成后调用） */
-  restoreLast: (api: LxMusicApi | null) => Promise<void>;
-  /** 定时关闭：剩余秒数（0 表示未开启） */
-  sleepRemaining: number;
-  /** 开启/调整定时关闭（分钟）；<=0 为取消 */
-  startSleepTimer: (minutes: number) => void;
-  cancelSleepTimer: () => void;
-}
-
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const library = useLibrary();
   const [state, setState] = useState<PlayerState>({
@@ -108,20 +101,23 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const seekAtRef = useRef(0);
   /** 进度写盘节流 */
   const lastPersistRef = useRef(0);
-  /** 锁屏信息更新节流（仅进度变化时节流；歌曲/时长/暂停态变化立即推送） */
+  /** 锁屏信息更新节流 */
   const lastLockRef = useRef(0);
   const lastLockKeyRef = useRef('');
-  /** 预取的下一首播放地址（熄屏/后台切歌用，避免后台现场网络取链被挂起） */
+  /** 预取的下一首播放地址（熄屏/后台切歌用） */
   const prefetchRef = useRef<{ songKey: string; url: string } | null>(null);
   const prefetchSeqRef = useRef(0);
-  /** 播放失败已自动换源重试的歌曲（同一首只试一次，防死循环） */
+  /** 播放失败已自动兜底的歌曲（同一首只试一次，防死循环） */
   const fallbackTriedRef = useRef<Set<string>>(new Set());
   /** 当前歌曲是否已触发后台保活（每首歌只触发一次） */
   const bgKeepRef = useRef(false);
+  /** 播放模式（持久化 + ref 同步，onEnd/next 内用 ref 避免闭包旧值） */
+  const [mode, setMode] = useState<PlayMode>(() => load<PlayMode>(KEYS.playMode, 'order'));
+  const modeRef = useRef<PlayMode>(mode);
 
   const songKeyOf = (s: Song) => `${s.source}:${s.id}`;
 
-  /** 定时关闭状态（endsAt 毫秒时间戳）与剩余秒数 */
+  /** 定时关闭状态与剩余秒数 */
   const [sleepTimer, setSleepTimer] = useState<SleepTimer | null>(null);
   const [sleepRemaining, setSleepRemaining] = useState(0);
 
@@ -139,6 +135,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const cancelSleepTimer: PlayerContextValue['cancelSleepTimer'] = () => {
     setSleepTimer(null);
     setSleepRemaining(0);
+  };
+
+  /** 循环切换播放模式并持久化 */
+  const cycleMode: PlayerContextValue['cycleMode'] = () => {
+    const nextMode: PlayMode = mode === 'order' ? 'single' : mode === 'single' ? 'random' : 'order';
+    setMode(nextMode);
+    modeRef.current = nextMode;
+    save(KEYS.playMode, nextMode);
   };
 
   // 定时关闭倒计时：到点自动暂停
@@ -169,14 +173,53 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     save(KEYS.lastPlay, last);
   };
 
-  /** 直接以已知 URL 播放并进入就绪态（前台取链成功 / 预取命中均走这里） */
+  /** 酷我官方直链：antiserver.kuwo.cn 返回真实 mp3 地址（官方接口，不依赖音源脚本） */
+  const kuwoDirectUrl = async (rid: string): Promise<string> => {
+    const url = `http://antiserver.kuwo.cn/anti.s?type=convert_url&rid=MUSIC_${rid}&format=mp3&response=url`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12_000);
+    try {
+      const resp = await fetch(url, { signal: controller.signal });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const text = (await resp.text()).trim();
+      if (!/^https?:\/\//.test(text)) throw new Error('酷我直链返回异常');
+      return text;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  /** 统一取播放地址：酷我直链优先（官方稳定）；其余走音源脚本；失败抛错由上层兜底 */
+  const resolvePlayUrl = async (song: Song, api: LxMusicApi | null): Promise<string> => {
+    if (song.source === 'kw' && song.hash) {
+      try {
+        return await kuwoDirectUrl(song.hash);
+      } catch {
+        /* 官方直链失败，落回音源脚本尝试 */
+      }
+    }
+    if (api) {
+      const cap = api.getSource(song.source);
+      if (cap?.actions.includes('musicUrl')) {
+        for (const quality of QUALITY_FALLBACK) {
+          try {
+            const res = await api.getMusicUrl(song.source, toMusicInfo(song), quality);
+            if (res?.url) return res.url;
+          } catch {
+            /* 尝试下一档音质 */
+          }
+        }
+      }
+    }
+    throw new Error('外部音源服务当前不可用');
+  };
+
+  /** 直接以已知 URL 播放并进入就绪态 */
   const applySong = (index: number, queueList: Song[], api: LxMusicApi | null, url: string) => {
     const song = queueList[index];
     if (!song) return;
-    // 若待续播目标是别的歌（切歌/换源重试），作废旧位置，避免错位 seek 导致乱跳
     const p = pendingSeekRef.current;
     if (p && p.songKey !== songKeyOf(song)) pendingSeekRef.current = null;
-    // 新歌进度立即生效：清掉上一首的 seek 防抖窗口（否则前 3 秒 onProgress 被忽略，进度条像卡住）
     seekAtRef.current = 0;
     lastProgressRef.current = 0;
     apiRef.current = api;
@@ -196,9 +239,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     library.bumpPlay(song);
     library.addRecent(song);
     persistPlay(song, 0);
-    // 切歌后重置保活标记，下一首临近结束时重新触发
     bgKeepRef.current = false;
-    // 顺带预取下一首，熄屏/后台切歌直接走缓存
     void prefetchNext(index, queueList, api);
   };
 
@@ -206,28 +247,37 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const prefetchNext = async (index: number, queueList: Song[], api: LxMusicApi | null) => {
     const seq = ++prefetchSeqRef.current;
     try {
-      if (!api || queueList.length === 0) return;
+      if (queueList.length === 0) return;
       const ni = index < queueList.length - 1 ? index + 1 : 0;
       const target = queueList[ni];
       if (!target) return;
-      const cap = api.getSource(target.source);
-      if (!cap || !cap.actions.includes('musicUrl')) return;
       let url: string | null = null;
-      for (const quality of QUALITY_FALLBACK) {
-        try {
-          const res = await api.getMusicUrl(target.source, toMusicInfo(target), quality);
-          if (res?.url) {
-            url = res.url;
-            break;
-          }
-        } catch {
-          /* 尝试下一档音质 */
-        }
+      try {
+        url = await resolvePlayUrl(target, api);
+      } catch {
+        /* 预取失败不阻塞 */
       }
-      if (seq !== prefetchSeqRef.current) return; // 期间已切歌，丢弃过期结果
+      if (seq !== prefetchSeqRef.current) return;
       prefetchRef.current = url ? { songKey: songKeyOf(target), url } : null;
     } catch {
       if (seq === prefetchSeqRef.current) prefetchRef.current = null;
+    }
+  };
+
+  /** 酷我同名兜底：任一源取链失败时，搜酷我同名歌曲并用官方直链重播 */
+  const autoFallbackToKuwo = async (song: Song): Promise<boolean> => {
+    const key = songKeyOf(song);
+    if (fallbackTriedRef.current.has(key)) return false;
+    fallbackTriedRef.current.add(key);
+    try {
+      const kw = `${song.name} ${song.singer}`.trim();
+      const results = await searchKuwo(kw);
+      const target = results[0];
+      if (!target) return false;
+      await play(target, apiRef.current, [target]);
+      return true;
+    } catch {
+      return false;
     }
   };
 
@@ -250,42 +300,29 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       error: null,
     }));
 
-    const info = toMusicInfo(song);
-    if (!api) {
-      pendingSeekRef.current = null;
-      setState(prev => ({ ...prev, paused: true, buffering: false, error: '尚未加载音源脚本，请先到「音源」页加载' }));
-      return;
-    }
-    const cap = api.getSource(song.source);
-    if (!cap || !cap.actions.includes('musicUrl')) {
-      pendingSeekRef.current = null;
-      setState(prev => ({
-        ...prev,
-        paused: true,
-        buffering: false,
-        error: `当前音源脚本不支持 ${song.source} 源，请换音源脚本或换搜索源`,
-      }));
-      return;
-    }
+    let url: string | null = null;
     let lastError: any = null;
-    for (const quality of QUALITY_FALLBACK) {
-      try {
-        const res = await api.getMusicUrl(song.source, info, quality);
-        if (res?.url) {
-          applySong(index, queueList, api, res.url);
-          return;
-        }
-      } catch (e) {
-        lastError = e;
-      }
+    try {
+      url = await resolvePlayUrl(song, api);
+    } catch (e) {
+      lastError = e;
     }
-    setState(prev => ({
-      ...prev,
-      paused: true,
-      buffering: false,
-      error: `取播放地址失败：${lastError?.message ?? lastError}（外部服务可能失效）`,
-    }));
-    pendingSeekRef.current = null;
+
+    if (!url) {
+      // 取链失败 → 自动用酷我同名兜底（保证能播）
+      const ok = await autoFallbackToKuwo(song);
+      if (!ok) {
+        setState(prev => ({
+          ...prev,
+          paused: true,
+          buffering: false,
+          error: `播放失败：${lastError?.message ?? lastError}（已尝试酷我替代但失败，稍后再试）`,
+        }));
+        pendingSeekRef.current = null;
+      }
+      return;
+    }
+    applySong(index, queueList, api, url);
   };
 
   const play: PlayerContextValue['play'] = async (song, api, queueList = [song]) => {
@@ -295,11 +332,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const toggle = () => setState(prev => ({ ...prev, paused: !prev.paused }));
 
-  /** 下一首：优先用预取 URL（熄屏/后台零网络依赖），队列末尾循环回第一首 */
-  const next = () => {
+  /** 下一首：manual=true 为手动（单曲循环也切歌）；manual=false 为自动播完（单曲循环重播当前） */
+  const next = (manual = true) => {
     const list = queueRef.current;
     if (list.length === 0) return;
-    const ni = indexRef.current < list.length - 1 ? indexRef.current + 1 : 0;
+    let ni: number;
+    const m = modeRef.current;
+    if (m === 'random' && list.length > 1) {
+      let r = Math.floor(Math.random() * list.length);
+      if (r === indexRef.current) r = (r + 1) % list.length;
+      ni = r;
+    } else if (m === 'single' && !manual) {
+      // 单曲循环自动播完：重播当前（由 onEnd 处理 seek(0)，这里不切歌）
+      return;
+    } else {
+      ni = indexRef.current < list.length - 1 ? indexRef.current + 1 : 0;
+    }
     const target = list[ni];
     if (!target) return;
     const pf = prefetchRef.current;
@@ -318,28 +366,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     void playIndex(pi, list, apiRef.current);
   };
 
-  /**
-   * 播放失败自动换源：当前源（腾讯/酷我等）取到的地址失效（403/-1102 权限类错误）时，
-   * 自动用网易云搜索同名歌曲并用当前音源播放（网易取链实测稳定）。
-   * 同一首歌只尝试一次，避免反复失败。
-   */
-  const autoFallbackToNetease = async (song: Song): Promise<boolean> => {
-    const key = songKeyOf(song);
-    if (fallbackTriedRef.current.has(key)) return false;
-    fallbackTriedRef.current.add(key);
-    if (song.source === 'wy') return false;
-    try {
-      const kw = `${song.name} ${song.singer}`.trim();
-      const results = await searchNetease(kw);
-      const target = results[0];
-      if (!target) return false;
-      await play(target, apiRef.current, [target]);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
   const seekTo: PlayerContextValue['seekTo'] = t => {
     const target = Math.max(0, Number(t) || 0);
     seekAtRef.current = Date.now();
@@ -351,15 +377,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  /** 恢复上次播放：恢复完整队列与当前歌曲，用当前音源重新取链并续播 */
+  /** 恢复上次播放：恢复完整队列与当前歌曲，重新取链并续播 */
   const restoreLast: PlayerContextValue['restoreLast'] = async api => {
-    if (state.song) return; // 已有播放则不打扰
+    if (state.song) return;
     const last = load<LastPlay | null>(KEYS.lastPlay, null);
     if (!last?.song) return;
     const q = Array.isArray(last.queue) && last.queue.length > 0 ? last.queue : [last.song];
     let idx =
       Number.isInteger(last.index) && last.index >= 0 && last.index < q.length ? last.index : 0;
-    // 当前歌曲不在队列（数据异常）时按歌曲定位
     if (!q[idx] || q[idx].source !== last.song.source || q[idx].id !== last.song.id) {
       const found = q.findIndex(s => s.source === last.song.source && s.id === last.song.id);
       idx = found >= 0 ? found : 0;
@@ -371,7 +396,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     await playIndex(idx, q, api);
   };
 
-  // ---- 锁屏「正在播放」：状态变化时同步到原生（封面由原生下载，支持 data URI）----
+  // ---- 锁屏「正在播放」 ----
   useEffect(() => {
     if (!NowPlayingNative?.setNowPlaying) return;
     if (!state.song || !state.url) {
@@ -379,8 +404,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const now = Date.now();
-    // 关键信息（歌曲/时长/播放暂停态）变化 → 立即推送；
-    // 仅进度（currentTime）变化 → 5s 节流，避免高频刷原生
     const key = `${songKeyOf(state.song)}|${state.duration}|${state.paused}`;
     if (key !== lastLockKeyRef.current) {
       lastLockKeyRef.current = key;
@@ -401,15 +424,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (state.song.pic) {
       NowPlayingNative.setNowPlaying({ ...info, artworkUrl: state.song.pic });
     } else {
-      // 无自带封面：用统一兜底拿 dataURI（避免锁屏卡片无图）
       resolveCover(state.song).then(dataUri => {
         NowPlayingNative?.setNowPlaying?.({ ...info, artworkUrl: dataUri ?? '' });
       });
     }
   }, [state.song, state.url, state.paused, state.duration, state.currentTime]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- 锁屏远程控制（播放/暂停/下一首/上一首/拖动进度）----
-  // 用原生回调注册（新架构下 RCTEventEmitter 事件不可靠），命令到达即回调
+  // ---- 锁屏远程控制 ----
   useEffect(() => {
     const mod = NowPlayingNative;
     if (!mod?.setCommandHandler) return;
@@ -426,7 +447,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           toggle();
           break;
         case 'next':
-          next();
+          next(true);
           break;
         case 'prev':
           prev();
@@ -445,11 +466,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 当前播放地址（引用稳定，避免每次渲染触发底层重新加载）
-  const videoSource = useMemo(
-    () => (state.url ? { uri: state.url } : null),
-    [state.url],
-  );
+  const videoSource = useMemo(() => (state.url ? { uri: state.url } : null), [state.url]);
 
   return (
     <PlayerContext.Provider
@@ -466,6 +483,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         sleepRemaining,
         startSleepTimer,
         cancelSleepTimer,
+        mode,
+        cycleMode,
       }}
     >
       {children}
@@ -479,7 +498,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           ignoreSilentSwitch="ignore"
           onLoad={({ duration }) => {
             setState(prev => ({ ...prev, duration }));
-            // 续播：仅当待 seek 位置属于当前这首歌时才消费，避免错位 seek
             const p = pendingSeekRef.current;
             if (p) {
               pendingSeekRef.current = null;
@@ -496,20 +514,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             }
           }}
           onProgress={({ currentTime }) => {
-            // seek 后 3s 内忽略原生回跳（跳转需要时间，窗口太短会让旧进度漏进来）
             if (Date.now() - seekAtRef.current < 3000) return;
             const t = Number(currentTime) || 0;
-            // 非 seek 期间出现明显回退（>1.5s）→ 原生异常回退值，忽略
             if (t < lastProgressRef.current - 1.5) return;
             lastProgressRef.current = t;
             setState(prev => ({ ...prev, currentTime: t }));
-            // 临近结尾（剩余 <6s）触发后台保活：保持音频会话 + 后台任务额度，
-            // 防止切歌空窗期（新歌网络加载中无声音输出）被系统挂起，导致后台不自动切下一首
             if (!bgKeepRef.current && state.song && state.duration > 10 && t > state.duration - 6) {
               bgKeepRef.current = true;
               NowPlayingNative?.keepSessionActive?.();
             }
-            // 节流：每 10 秒把进度写入缓存（下次打开自动续播）
             const now = Date.now();
             if (state.song && now - lastPersistRef.current > 10_000) {
               lastPersistRef.current = now;
@@ -518,25 +531,30 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           }}
           onEnd={() => {
             library.bumpSeconds(state.duration);
-            // 播完瞬间再保活一次（万一临近结尾那 6 秒的进度事件被系统吃掉）
             if (!bgKeepRef.current) {
               bgKeepRef.current = true;
               NowPlayingNative?.keepSessionActive?.();
             }
-            // 走统一 next()：优先预取 URL，后台/熄屏也能自动切下一首；末尾循环
-            next();
+            if (modeRef.current === 'single') {
+              // 单曲循环：重播当前
+              try {
+                videoRef.current?.seek(0);
+              } catch { /* 忽略 */ }
+              seekAtRef.current = Date.now();
+              setState(prev => ({ ...prev, paused: false, currentTime: 0 }));
+              return;
+            }
+            next(false);
           }}
           onBuffer={({ isBuffering }) => setState(prev => ({ ...prev, buffering: isBuffering }))}
           onError={e => {
             const msg = typeof e === 'string' ? e : JSON.stringify(e);
             setState(prev => ({ ...prev, paused: true, buffering: false, error: `播放失败：${msg}` }));
-            // 这首歌没播起来，作废待续播位置（防换源重试时错位 seek）
             pendingSeekRef.current = null;
             const song = state.song;
-            // 播放失败自动兜底：该源取到的地址失效/被拒/无法加载 → 换网易同名歌曲重播
-            // （同一首只试一次，防死循环；网易取链实测稳定）
-            if (song && song.source !== 'wy' && !fallbackTriedRef.current.has(songKeyOf(song))) {
-              void autoFallbackToNetease(song);
+            // 播放中地址失效 → 自动酷我同名兜底（同一首只试一次）
+            if (song && !fallbackTriedRef.current.has(songKeyOf(song))) {
+              void autoFallbackToKuwo(song);
             }
           }}
           style={{ width: 0, height: 0, position: 'absolute' }}

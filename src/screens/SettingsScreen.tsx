@@ -104,7 +104,7 @@ export default function SettingsScreen({
                 </View>
                 <View style={styles.srcRight}>
                   {item.state === 'loading' ? (
-                    <ActivityIndicator size="small" color="#00B578" />
+                    <ActivityIndicator size="small" color="#EC4141" />
                   ) : (
                     <Text
                       style={[
@@ -184,7 +184,7 @@ export default function SettingsScreen({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
+  container: { flex: 1, backgroundColor: '#F5F5F7' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   backBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginRight: 2 },
   backText: { fontSize: 34, color: '#1F2329', lineHeight: 34, marginTop: -4 },
@@ -193,13 +193,13 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1F2329', marginTop: 20 },
   sectionDesc: { fontSize: 12, color: '#8A9099', lineHeight: 18, marginTop: 5, marginBottom: 12 },
   messageBox: {
-    backgroundColor: '#FFF4E6',
+    backgroundColor: '#FDECEC',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 8,
     marginBottom: 10,
   },
-  messageText: { fontSize: 12, color: '#B76E00', lineHeight: 17 },
+  messageText: { fontSize: 12, color: '#C62F2F', lineHeight: 17 },
   emptyBox: { alignItems: 'center', paddingVertical: 26, backgroundColor: '#FFFFFF', borderRadius: 16 },
   emptyNote: { fontSize: 34, color: '#DDE3E9' },
   emptyText: { fontSize: 13, color: '#B4B9C0', marginTop: 6 },
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  srcCardActive: { borderColor: '#00B578' },
+  srcCardActive: { borderColor: '#EC4141' },
   srcCardLoading: { opacity: 0.6 },
   srcIcon: {
     width: 42,
@@ -228,20 +228,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  srcIconActive: { backgroundColor: '#E6F7F0' },
+  srcIconActive: { backgroundColor: '#FDECEC' },
   srcIconText: { fontSize: 17, color: '#8A9099', fontWeight: '600' },
-  srcIconTextActive: { color: '#00B578' },
+  srcIconTextActive: { color: '#EC4141' },
   srcMain: { flex: 1, paddingHorizontal: 12, minWidth: 0 },
   srcNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   srcName: { fontSize: 15, color: '#1F2329', fontWeight: '600', flexShrink: 1 },
-  srcNameActive: { color: '#00B578' },
-  badge: { backgroundColor: '#E6F7F0', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
-  badgeText: { fontSize: 10, color: '#00B578', fontWeight: '600' },
+  srcNameActive: { color: '#EC4141' },
+  badge: { backgroundColor: '#FDECEC', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 2 },
+  badgeText: { fontSize: 10, color: '#EC4141', fontWeight: '600' },
   srcUrl: { fontSize: 11, color: '#B4B9C0', marginTop: 3 },
   srcError: { fontSize: 11, color: '#F53F3F', marginTop: 4, lineHeight: 15 },
   srcRight: { alignItems: 'flex-end', justifyContent: 'center', gap: 8 },
   srcState: { fontSize: 12, color: '#B4B9C0' },
-  srcStateReady: { color: '#00B578', fontWeight: '600' },
+  srcStateReady: { color: '#EC4141', fontWeight: '600' },
   srcStateError: { color: '#F53F3F' },
   removeBtn: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFF1F0', alignItems: 'center', justifyContent: 'center' },
   removeText: { fontSize: 11, color: '#F53F3F', lineHeight: 13 },
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     color: '#1F2329',
     backgroundColor: '#F7F8FA',
   },
-  addBtn: { backgroundColor: '#00B578', borderRadius: 12, paddingHorizontal: 18, paddingVertical: 11 },
+  addBtn: { backgroundColor: '#EC4141', borderRadius: 12, paddingHorizontal: 18, paddingVertical: 11 },
   addBtnDisabled: { opacity: 0.4 },
   addBtnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   addError: { fontSize: 12, color: '#F53F3F', marginTop: 8 },
@@ -292,9 +292,9 @@ const styles = StyleSheet.create({
   presetMain: { flex: 1, minWidth: 0, paddingRight: 10 },
   presetName: { fontSize: 14, color: '#1F2329', fontWeight: '500' },
   presetUrl: { fontSize: 10, color: '#B4B9C0', marginTop: 3 },
-  presetBtn: { backgroundColor: '#E6F7F0', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7 },
+  presetBtn: { backgroundColor: '#FDECEC', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 7 },
   presetBtnAdded: { backgroundColor: '#F0F2F5' },
-  presetBtnText: { fontSize: 12, color: '#00B578', fontWeight: '600' },
+  presetBtnText: { fontSize: 12, color: '#EC4141', fontWeight: '600' },
   presetBtnTextAdded: { color: '#B4B9C0' },
   about: { textAlign: 'center', fontSize: 11, color: '#C0C6CC', marginTop: 26 },
 });

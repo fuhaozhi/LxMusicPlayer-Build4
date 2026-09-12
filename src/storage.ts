@@ -41,4 +41,6 @@ export const KEYS = {
   lastPlay: 'lx.lastPlay',
   /** 搜索历史（最多 10 条，点击可重搜） */
   searchHistory: 'lx.searchHistory',
+  /** 播放模式：order/single/random */
+  playMode: 'lx.playMode',
 } as const;

@@ -65,7 +65,7 @@ export default function ReportScreen({ onBack }: { onBack: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F6F8' },
+  container: { flex: 1, backgroundColor: '#F5F5F7' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
   backBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginRight: 2 },
   backText: { fontSize: 34, color: '#1F2329', lineHeight: 34, marginTop: -4 },
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  statNum: { fontSize: 26, fontWeight: '800', color: '#00B578' },
+  statNum: { fontSize: 26, fontWeight: '800', color: '#EC4141' },
   statLabel: { fontSize: 11, color: '#8A9099', marginTop: 6 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1F2329', marginTop: 24, marginBottom: 10 },
   empty: { fontSize: 13, color: '#B4B9C0', paddingVertical: 8 },
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   rank: { width: 26, fontSize: 15, fontWeight: '700', color: '#B4B9C0', textAlign: 'center' },
-  rankTop: { color: '#00B578' },
+  rankTop: { color: '#EC4141' },
   songMain: { flex: 1, paddingHorizontal: 10, minWidth: 0 },
   songName: { fontSize: 14, color: '#1F2329', fontWeight: '500' },
   songSinger: { fontSize: 11, color: '#8A9099', marginTop: 2 },
