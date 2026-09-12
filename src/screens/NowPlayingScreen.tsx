@@ -204,6 +204,11 @@ export default function NowPlayingScreen({
         <Text style={styles.singer} numberOfLines={1}>
           {song.singer}
         </Text>
+        {song.album ? (
+          <Text style={styles.album} numberOfLines={1}>
+            {song.album}
+          </Text>
+        ) : null}
 
         {/* 歌词卡片 */}
         <View style={styles.lyricCard}>
@@ -430,6 +435,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 20, fontWeight: '700', color: '#1F2329', marginTop: 18, maxWidth: '100%' },
   singer: { fontSize: 13, color: '#8A9099', marginTop: 5 },
+  album: { fontSize: 11, color: '#C0C6CC', marginTop: 4 },
   lyricCard: {
     width: '100%',
     height: 230,

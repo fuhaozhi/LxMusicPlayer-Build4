@@ -114,9 +114,11 @@
   .ptoggle { width: 34px; height: 34px; border-radius: 17px; background: #FDECEC; display: flex; align-items: center; justify-content: center; color: #EC4141; font-size: 11px; }
   .pgo { font-size: 20px; color: #C0C6CC; padding: 0 4px; }
   .tabbar { display: flex; background: #fff; border-top: 1px solid #EDEFF2; padding: 8px 0; }
-  .tab { flex: 1; display: flex; justify-content: center; align-items: center; }
-  .tab span { font-size: 13px; color: #8A9099; padding: 7px 26px; border-radius: 20px; cursor: pointer; }
-  .tab span.on { background: #FDECEC; color: #EC4141; font-weight: 600; }
+  .tab { flex: 1; display: flex; justify-content: center; align-items: center; cursor: pointer; }
+  .tab span { font-size: 11px; color: #9AA0A8; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .tab span b { font-size: 20px; font-weight: 400; line-height: 22px; }
+  .tab span.on { color: #EC4141; font-weight: 700; }
+  .tab span.on b { font-weight: 700; }
 
   .tips { margin-top: 16px; text-align: center; font-size: 12px; color: #8A9099; line-height: 20px; }
 
@@ -334,15 +336,16 @@
     </div>
 
     <div class="tabbar">
-      <div class="tab"><span id="tab-home" class="on" onclick="go('home')">主页</span></div>
-      <div class="tab"><span id="tab-explore" onclick="go('explore')">音乐馆</span></div>
-      <div class="tab"><span id="tab-mine" onclick="go('mine')">我的</span></div>
+      <div class="tab"><span id="tab-home" class="on" onclick="go('home')"><b>⌂</b>主页</span></div>
+      <div class="tab"><span id="tab-explore" onclick="go('explore')"><b>♪</b>音乐馆</span></div>
+      <div class="tab"><span id="tab-mine" onclick="go('mine')"><b>☺</b>我的</span></div>
     </div>
   </div>
 
   <div class="changelog">
     <div class="cl-title">本版更新</div>
-    <div class="cl-item">🎨 全新网易云风格：红白主题，主页 / 音乐馆 / 我的 红色渐变头部，播放页大封面 + 红色进度</div>
+    <div class="cl-item">🎨 全面按网易云移动端设计语言精修：红黑经典配色、底部导航改为「图标 + 文字」（选中红色）、播放页显示专辑名</div>
+    <div class="cl-item">· 主页：每日推荐 / 心动模式 / 漫游 三入口卡 + 根据喜爱歌曲推荐横滑 + 猜你喜欢的好歌列表</div>
     <div class="cl-item">· 播放页左侧新增播放模式：🔁 顺序 / 🔂 单曲循环 / 🔀 随机（点按切换、自动保存）；右侧新增「列表」查看当前播放队列、点击切歌</div>
     <div class="cl-item">· 移除咪咕搜索；酷我改用官方直链（不依赖音源脚本，一定可播）；酷狗 / QQ / 网易播放失败自动用酷我同名兜底</div>
     <div class="cl-item">· 修复：酷狗封面（官方封面字段带 {size} 占位符已替换）</div>

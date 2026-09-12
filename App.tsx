@@ -30,10 +30,10 @@ type Overlay =
   | { kind: 'collection'; collection: Collection }
   | { kind: 'local'; playlist: LocalPlaylist };
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'home', label: '主页' },
-  { id: 'explore', label: '音乐馆' },
-  { id: 'mine', label: '我的' },
+const TABS: { id: Tab; label: string; icon: string; iconActive: string }[] = [
+  { id: 'home', label: '主页', icon: '⌂', iconActive: '⌂' },
+  { id: 'explore', label: '音乐馆', icon: '♪', iconActive: '♪' },
+  { id: 'mine', label: '我的', icon: '☺', iconActive: '☺' },
 ];
 
 function Main() {
@@ -96,9 +96,10 @@ function Main() {
               const active = tab === t.id;
               return (
                 <Pressable key={t.id} style={styles.tabItem} onPress={() => setTab(t.id)}>
-                  <View style={[styles.capsule, active && styles.capsuleActive]}>
-                    <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{t.label}</Text>
-                  </View>
+                  <Text style={[styles.tabIcon, active && styles.tabIconActive]}>
+                    {active ? t.iconActive : t.icon}
+                  </Text>
+                  <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{t.label}</Text>
                 </Pressable>
               );
             })}
@@ -166,11 +167,11 @@ const styles = StyleSheet.create({
     borderTopColor: '#EDEFF2',
     paddingTop: 6,
   },
-  tabItem: { flex: 1, alignItems: 'center' },
-  capsule: { paddingHorizontal: 26, paddingVertical: 7, borderRadius: 20 },
-  capsuleActive: { backgroundColor: '#FDECEC' },
-  tabLabel: { fontSize: 13, color: '#8A9099' },
-  tabLabelActive: { color: RED, fontWeight: '600' },
+  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 2 },
+  tabIcon: { fontSize: 20, color: '#9AA0A8', lineHeight: 24 },
+  tabIconActive: { color: RED, fontWeight: '700' },
+  tabLabel: { fontSize: 11, color: '#9AA0A8', marginTop: 1 },
+  tabLabelActive: { color: RED, fontWeight: '700' },
 });
 
 export default App;
