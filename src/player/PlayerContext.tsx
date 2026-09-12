@@ -6,7 +6,7 @@
  * 附加能力：进度 seek、锁屏「正在播放」与远程控制、上次播放缓存自动续播、定时关闭。
  */
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { NativeModules } from 'react-native';
+import { AppState, NativeModules } from 'react-native';
 import Video from 'react-native-video';
 import { LxMusicApi } from '../lx-api/index.js';
 import type { LxMusicApi as LxMusicApiType } from '../lx-api/index.js';
@@ -76,6 +76,7 @@ const NowPlayingNative = NativeModules?.LxNowPlaying as
       clearNowPlaying?: () => void;
       setCommandHandler?: (handler: ((events: any[]) => void) | null) => void;
       keepSessionActive?: () => void;
+      updateProgress?: (currentTime: number, rate: number) => void;
     }
   | undefined;
 
@@ -457,6 +458,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* 个别引擎不支持 seek 时忽略 */
     }
+    // 立即同步锁屏进度基准（拖动后原生自推从新位置继续，不沿用旧进度）
+    if (state.song && state.url && NowPlayingNative?.updateProgress) {
+      NowPlayingNative.updateProgress(target, state.paused ? 0 : 1);
+    }
   };
 
   /** 恢复上次播放：恢复完整队列与当前歌曲，重新取链并续播 */
@@ -478,7 +483,43 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     await playIndex(idx, q, api);
   };
 
+  // ---- 回前台强制校准进度 ----
+  // iOS 后台/锁屏时 react-native-video 的 onProgress 会停发，且回前台不一定自动恢复，
+  // 导致进度条卡在锁屏前的值。回前台主动 getCurrentTime 校准一次。
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', s => {
+      if (s !== 'active') return;
+      setTimeout(() => {
+        try {
+          const v = videoRef.current;
+          if (!v) return;
+          v.getCurrentTime()
+            .then((t: number) => {
+              const nt = Number(t) || 0;
+              if (nt <= 0) return;
+              lastProgressRef.current = nt;
+              setState(prev => {
+                if (Math.abs(prev.currentTime - nt) < 1) return prev;
+                return { ...prev, currentTime: nt };
+              });
+              // 同步校准锁屏进度基准（原生自推可能已漂移）
+              if (NowPlayingNative?.updateProgress) {
+                NowPlayingNative.updateProgress(nt, state.paused ? 0 : 1);
+              }
+            })
+            .catch(() => {});
+        } catch {
+          /* 播放器未就绪时忽略 */
+        }
+      }, 400);
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.url]);
+
   // ---- 锁屏「正在播放」 ----
+  // 播放中不重复推送（原生自推锁屏进度，避免低频 JS 值覆盖导致锁屏卡/回跳）；
+  // 仅切歌/暂停/时长变化时推送完整信息。
   useEffect(() => {
     if (!NowPlayingNative?.setNowPlaying) return;
     if (!state.song || !state.url) {
@@ -490,7 +531,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (key !== lastLockKeyRef.current) {
       lastLockKeyRef.current = key;
       lastLockRef.current = now;
-    } else if (now - lastLockRef.current < 5000 && state.currentTime > 0 && !state.paused) {
+    } else if (
+      now - lastLockRef.current < 60_000 &&
+      state.currentTime > 0 &&
+      !state.paused
+    ) {
       return;
     } else {
       lastLockRef.current = now;

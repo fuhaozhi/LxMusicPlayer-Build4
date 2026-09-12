@@ -94,6 +94,13 @@ RCT_EXPORT_METHOD(keepSessionActive) {
     lastRate = 0;
   }
   if (lastRate > 0) lastElapsed += 1.0;
+  // 播放中每 30 秒保活一次：后台切歌/锁屏进度的持续不依赖 JS onProgress
+  // （iOS 后台时 onProgress 会停发，JS 的 keepSessionActive 调用会断链）
+  static NSInteger keepCount = 0;
+  keepCount++;
+  if (lastRate > 0 && keepCount % 30 == 0) {
+    [self keepSessionActive];
+  }
   NSMutableDictionary *m =
       [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
   if (!m) m = [NSMutableDictionary dictionary];
@@ -204,6 +211,24 @@ RCT_EXPORT_METHOD(clearNowPlaying) {
     bgTask = UIBackgroundTaskInvalid;
   }
   [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nil;
+}
+
+/// 轻量同步锁屏进度基准（JS 在 seek / 回前台校准 / 暂停恢复时调用）。
+/// 只更新 elapsed 与 rate，不重建封面、不重启计时器。
+RCT_EXPORT_METHOD(updateProgress:(nonnull NSNumber *)currentTime
+                            rate:(nonnull NSNumber *)rate) {
+  lastElapsed = [currentTime doubleValue];
+  lastRate = [rate doubleValue];
+  if (hasProgress) {
+    NSMutableDictionary *m =
+        [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
+    if (m) {
+      m[MPNowPlayingInfoPropertyElapsedPlaybackTime] =
+          lastElapsed > 0 ? @(lastElapsed) : @0;
+      m[MPNowPlayingInfoPropertyPlaybackRate] = @(lastRate);
+      [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = m;
+    }
+  }
 }
 
 - (void)loadArtwork:(NSString *)urlString
