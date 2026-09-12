@@ -171,9 +171,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     save(KEYS.lastPlay, last);
   };
 
-  /** 酷我官方直链：antiserver.kuwo.cn 返回真实 mp3 地址（官方接口，不依赖音源脚本） */
+  /** 酷我官方直链：antiserver.kuwo.cn 返回真实 mp3 地址（官方接口，不依赖音源脚本；用 https 避开 iOS 明文限制） */
   const kuwoDirectUrl = async (rid: string): Promise<string> => {
-    const url = `http://antiserver.kuwo.cn/anti.s?type=convert_url&rid=MUSIC_${rid}&format=mp3&response=url`;
+    const url = `https://antiserver.kuwo.cn/anti.s?type=convert_url&rid=MUSIC_${rid}&format=mp3&response=url`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12_000);
     try {
@@ -204,11 +204,32 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  /** 网易云官方直链：enhance/player/url 返回真实音频地址（官方接口，实测可用；返回地址统一转 https） */
+  const wyDirectUrl = async (id: string): Promise<string> => {
+    const url = `https://music.163.com/api/song/enhance/player/url?ids=[${id}]&br=128000`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12_000);
+    try {
+      const resp = await fetch(url, {
+        headers: { Referer: 'https://music.163.com/', 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15' },
+        signal: controller.signal,
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const j = await resp.json();
+      const u: string = j?.data?.[0]?.url || '';
+      if (!/^https?:\/\//.test(u)) throw new Error('网易返回异常');
+      return u.startsWith('http://') ? 'https://' + u.slice(7) : u;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
   /**
    * 统一取播放地址：点什么歌就播什么歌
    * - 酷我：官方直链（antiserver.kuwo.cn）
    * - 酷狗：官方直链（m.kugou.com playInfo），失败落回音源脚本
-   * - 网易/QQ：走音源脚本原源取链，失败即明确报错，不自动换成其他版本
+   * - 网易：官方直链（enhance/player/url），失败落回音源脚本
+   * - QQ：走音源脚本原源取链，失败即明确报错，不自动换成其他版本
    */
   const resolvePlayUrl = async (song: Song, api: LxMusicApi | null): Promise<string> => {
     if (song.source === 'kw' && song.hash) {
@@ -221,6 +242,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (song.source === 'kg' && song.hash) {
       try {
         return await kugouDirectUrl(song.hash);
+      } catch {
+        /* 官方直链失败，落回音源脚本尝试 */
+      }
+    }
+    if (song.source === 'wy' && song.id) {
+      try {
+        return await wyDirectUrl(song.id);
       } catch {
         /* 官方直链失败，落回音源脚本尝试 */
       }
