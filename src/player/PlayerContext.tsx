@@ -176,6 +176,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     // 若待续播目标是别的歌（切歌/换源重试），作废旧位置，避免错位 seek 导致乱跳
     const p = pendingSeekRef.current;
     if (p && p.songKey !== songKeyOf(song)) pendingSeekRef.current = null;
+    // 新歌进度立即生效：清掉上一首的 seek 防抖窗口（否则前 3 秒 onProgress 被忽略，进度条像卡住）
+    seekAtRef.current = 0;
     lastProgressRef.current = 0;
     apiRef.current = api;
     indexRef.current = index;

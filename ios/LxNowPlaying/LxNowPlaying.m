@@ -12,6 +12,7 @@
   NSTimer *progressTimer;
   double lastElapsed;
   double lastRate;
+  double lastDuration;
   BOOL hasProgress;
   UIBackgroundTaskIdentifier bgTask;
 }
@@ -88,6 +89,10 @@ RCT_EXPORT_METHOD(keepSessionActive) {
 
 - (void)tickProgress {
   if (!hasProgress) return;
+  // 进度已到/越过终点（切歌空窗期新歌还没 onLoad）：停止推进，避免锁屏卡在旧歌进度
+  if (lastDuration > 0 && lastElapsed >= lastDuration - 0.3) {
+    lastRate = 0;
+  }
   if (lastRate > 0) lastElapsed += 1.0;
   NSMutableDictionary *m =
       [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
@@ -101,10 +106,6 @@ RCT_EXPORT_METHOD(keepSessionActive) {
   [progressTimer invalidate];
   progressTimer = nil;
   hasProgress = NO;
-  if (bgTask != UIBackgroundTaskInvalid) {
-    [[UIApplication sharedApplication] endBackgroundTask:bgTask];
-    bgTask = UIBackgroundTaskInvalid;
-  }
 }
 
 - (void)configureAudioSession {
@@ -165,8 +166,16 @@ RCT_EXPORT_METHOD(setNowPlaying:(NSDictionary *)info) {
     now[MPNowPlayingInfoPropertyPlaybackRate] = rate ? rate : @1;
     lastElapsed = currentTime ? [currentTime doubleValue] : 0;
     lastRate = rate ? [rate doubleValue] : 1;
+    lastDuration = [duration doubleValue];
     hasProgress = YES;
     [self startProgressTimer];
+  } else {
+    // 切歌/新歌未就绪：清掉推进状态，锁屏立即停住，不再沿用上一首的进度
+    lastElapsed = 0;
+    lastRate = 0;
+    lastDuration = 0;
+    hasProgress = NO;
+    [self stopProgressTimer];
   }
 
   [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = now;
@@ -190,6 +199,10 @@ RCT_EXPORT_METHOD(setNowPlaying:(NSDictionary *)info) {
 
 RCT_EXPORT_METHOD(clearNowPlaying) {
   [self stopProgressTimer];
+  if (bgTask != UIBackgroundTaskInvalid) {
+    [[UIApplication sharedApplication] endBackgroundTask:bgTask];
+    bgTask = UIBackgroundTaskInvalid;
+  }
   [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = nil;
 }
 
