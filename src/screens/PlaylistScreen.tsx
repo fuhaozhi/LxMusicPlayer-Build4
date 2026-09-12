@@ -124,6 +124,24 @@ export default function PlaylistScreen({
           data={songs}
           keyExtractor={s => `${s.source}:${s.id}`}
           contentContainerStyle={styles.listContent}
+          ListHeaderComponent={
+            songs[0] ? (
+              <View style={styles.topCard}>
+                <View style={styles.topCardCover}>
+                  <SongArt song={songs[0]} size={190} radius={18} />
+                  <View style={styles.topBadge}>
+                    <Text style={styles.topBadgeText}>榜首</Text>
+                  </View>
+                </View>
+                <Text style={styles.topCardName} numberOfLines={1}>
+                  {songs[0].name}
+                </Text>
+                <Text style={styles.topCardSinger} numberOfLines={1}>
+                  {songs[0].singer}
+                </Text>
+              </View>
+            ) : undefined
+          }
           renderItem={({ item }) => (
             <Row song={item} onPlay={() => play(item, getApi(), songs)} />
           )}
@@ -168,6 +186,20 @@ const styles = StyleSheet.create({
   },
   retryText: { fontSize: 13, color: '#EC4141', fontWeight: '600' },
   listContent: { paddingHorizontal: 16, paddingBottom: 20 },
+  topCard: { alignItems: 'center', paddingVertical: 20, paddingBottom: 22 },
+  topCardCover: { position: 'relative', marginBottom: 12 },
+  topBadge: {
+    position: 'absolute',
+    left: 8,
+    bottom: 8,
+    backgroundColor: 'rgba(236,65,65,0.92)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  topBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '700' },
+  topCardName: { fontSize: 18, fontWeight: '700', color: '#1F2329' },
+  topCardSinger: { fontSize: 13, color: '#8A9099', marginTop: 4 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

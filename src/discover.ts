@@ -62,23 +62,26 @@ async function fetchWyPlaylist(id: string): Promise<Song[]> {
   throw lastError ?? new Error('网易云接口无返回');
 }
 
-/** 腾讯音乐排行榜（实测 v8 toplist 可用） */
+/** 腾讯音乐排行榜（实测 v8 toplist 可用；响应歌曲信息在 songlist[].data 嵌套字段） */
 async function fetchTxTop(topId: string): Promise<Song[]> {
   const url = `https://c.y.qq.com/v8/fcg-bin/fcg_v8_toplist_cp.fcg?page=detail&topid=${topId}&type=top&song_begin=0&song_num=50&format=json`;
   const data = await fetchJson(url, { Referer: 'https://y.qq.com/' });
   const list: any[] = data?.songlist ?? [];
   return list
-    .filter((it: any) => it?.songmid)
-    .map((it: any) => ({
-      source: 'tx' as const,
-      id: String(it.songmid),
-      songmid: String(it.songmid),
-      name: String(it.songname ?? ''),
-      singer: (it.singer ?? []).map((s: any) => s?.name ?? '').join(' / '),
-      album: it.albumname ? String(it.albumname) : undefined,
-      interval: Number(it.interval ?? 0) || undefined,
-      pic: it.albummid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${it.albummid}.jpg` : undefined,
-    }));
+    .filter((it: any) => it?.data?.songmid)
+    .map((it: any) => {
+      const d = it.data;
+      return {
+        source: 'tx' as const,
+        id: String(d.songmid),
+        songmid: String(d.songmid),
+        name: String(d.songname ?? ''),
+        singer: (d.singer ?? []).map((s: any) => s?.name ?? '').join(' / '),
+        album: d.albumname ? String(d.albumname) : undefined,
+        interval: Number(d.interval ?? 0) || undefined,
+        pic: d.albummid ? `https://y.gtimg.cn/music/photo_new/T002R300x300M000${d.albummid}.jpg` : undefined,
+      };
+    });
 }
 
 /** 主页「每日推荐」合集（全部为实测可用接口） */
