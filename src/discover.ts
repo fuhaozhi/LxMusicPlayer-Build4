@@ -52,7 +52,7 @@ async function fetchWyPlaylist(id: string): Promise<Song[]> {
             singer: (it.ar ?? []).map((a: any) => a?.name ?? '').join(' / '),
             album: it.al?.name ? String(it.al.name) : undefined,
             interval: Math.floor(Number(it.dt ?? 0) / 1000) || undefined,
-            pic: it.al?.picUrl ? String(it.al.picUrl) : undefined,
+            pic: it.al?.picUrl ? String(it.al.picUrl).replace(/^http:/, 'https:') : undefined,
           }));
       }
     } catch (e) {
@@ -100,6 +100,12 @@ export const EXPLORE_COLLECTIONS: Collection[] = [
   { id: 'wy-original', name: '原创音乐榜', desc: '网易云音乐 · 独立原创新声', source: 'wy', apiId: '2884035', hue: 152 },
   { id: 'tx-top', name: '腾讯巅峰榜', desc: 'QQ 音乐 · 巅峰流行榜', source: 'tx', apiId: '26', hue: 330 },
   { id: 'tx-new', name: '腾讯新歌榜', desc: 'QQ 音乐 · 最新歌曲', source: 'tx', apiId: '27', hue: 268 },
+  { id: 'tx-inland', name: 'QQ内地榜', desc: 'QQ 音乐 · 内地热歌', source: 'tx', apiId: '62', hue: 130 },
+  { id: 'tx-ht', name: 'QQ港台榜', desc: 'QQ 音乐 · 港台热歌', source: 'tx', apiId: '63', hue: 300 },
+  { id: 'tx-douyin', name: 'QQ抖音榜', desc: 'QQ 音乐 · 抖音爆款', source: 'tx', apiId: '59', hue: 200 },
+  { id: 'tx-eu', name: 'QQ欧美榜', desc: 'QQ 音乐 · 欧美热歌', source: 'tx', apiId: '3', hue: 40 },
+  { id: 'tx-rap', name: 'QQ说唱榜', desc: 'QQ 音乐 · 说唱新势力', source: 'tx', apiId: '52', hue: 170 },
+  { id: 'tx-edm', name: 'QQ电音榜', desc: 'QQ 音乐 · 电子舞曲', source: 'tx', apiId: '36', hue: 260 },
 ];
 
 /** 根据合集拉取歌曲列表 */
