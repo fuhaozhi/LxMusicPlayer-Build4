@@ -10,9 +10,10 @@ import { NativeModules } from 'react-native';
 import Video from 'react-native-video';
 import type { LxMusicApi } from '../lx-api/index.js';
 import type { PlayerState, Song } from '../types';
+import { toMusicInfo } from '../sourceManager';
 import { useLibrary } from '../library';
 import { resolveCover } from '../cover';
-import { BAD_VERSION, searchKuwo } from '../searchSources';
+import { searchKuwo } from '../searchSources';
 import { KEYS, load, save } from '../storage';
 import { formatTime } from './lrc';
 
@@ -49,6 +50,8 @@ export function usePlayer(): PlayerContextValue {
   if (!ctx) throw new Error('usePlayer must be used within PlayerProvider');
   return ctx;
 }
+
+const QUALITY_FALLBACK = ['320k', '128k'] as const;
 
 /** 上次播放的持久化结构（含完整队列，重启后恢复整个列表继续播） */
 interface LastPlay {
@@ -104,8 +107,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   /** 预取的下一首播放地址（熄屏/后台切歌用） */
   const prefetchRef = useRef<{ songKey: string; url: string } | null>(null);
   const prefetchSeqRef = useRef(0);
-  /** 播放失败已自动兜底的歌曲（同一首只试一次，防死循环） */
-  const fallbackTriedRef = useRef<Set<string>>(new Set());
   /** 当前歌曲是否已触发后台保活（每首歌只触发一次） */
   const bgKeepRef = useRef(false);
   /** 播放模式（持久化 + ref 同步，onEnd/next 内用 ref 避免闭包旧值） */
@@ -187,12 +188,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   };
 
   /**
-   * 统一取播放地址：
-   * - 酷我：直接官方直链（antiserver.kuwo.cn，稳定可用）
-   * - 酷狗/QQ/网易：音源脚本聚合服务器当前整体失效（实测取链返回错误/403/404，
-   *   且逐个请求失效站点要等几十秒），直接抛错 → 上层立即用酷我同名兜底播放，点击即播不等待
+   * 统一取播放地址：点什么歌就播什么歌
+   * - 酷我：官方直链（antiserver.kuwo.cn）
+   * - 酷狗/QQ/网易：走音源脚本原源取链，失败即明确报错，不自动换成其他版本
    */
-  const resolvePlayUrl = async (song: Song, _api: LxMusicApi | null): Promise<string> => {
+  const resolvePlayUrl = async (song: Song, api: LxMusicApi | null): Promise<string> => {
     if (song.source === 'kw' && song.hash) {
       try {
         return await kuwoDirectUrl(song.hash);
@@ -200,7 +200,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         throw new Error('酷我官方直链暂不可用，请稍后再试');
       }
     }
-    throw new Error('外部音源服务当前不可用，已自动改用酷我版本播放');
+    if (api) {
+      const cap = api.getSource(song.source);
+      if (cap?.actions.includes('musicUrl')) {
+        for (const quality of QUALITY_FALLBACK) {
+          try {
+            const res = await api.getMusicUrl(song.source, toMusicInfo(song), quality);
+            if (res?.url) return res.url;
+          } catch {
+            /* 尝试下一档音质 */
+          }
+        }
+      }
+    }
+    throw new Error('音源暂不可用，无法播放这首歌');
   };
 
   /** 直接以已知 URL 播放并进入就绪态 */
@@ -253,28 +266,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  /** 酷我同名兜底：任一源取链失败时，搜酷我同名歌曲并用官方直链重播
-   *  优先歌名精确匹配的原版；排除伴奏/KTV/DJ/现场等版本，避免播成伴奏 */
-  const autoFallbackToKuwo = async (song: Song): Promise<boolean> => {
-    const key = songKeyOf(song);
-    if (fallbackTriedRef.current.has(key)) return false;
-    fallbackTriedRef.current.add(key);
-    try {
-      const kw = `${song.name} ${song.singer}`.trim();
-      const results = await searchKuwo(kw);
-      if (results.length === 0) return false;
-      const norm = (n: string) => n.replace(/\s+/g, '').toLowerCase();
-      const exact = results.find(
-        r => norm(r.name) === norm(song.name) && !BAD_VERSION.test(r.name),
-      );
-      const target = exact ?? results.find(r => !BAD_VERSION.test(r.name)) ?? results[0];
-      await play(target, apiRef.current, [target]);
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
   const playIndex = async (index: number, queueList: Song[], api: LxMusicApi | null) => {
     const song = queueList[index];
     if (!song) return;
@@ -303,17 +294,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (!url) {
-      // 取链失败 → 自动用酷我同名兜底（保证能播）
-      const ok = await autoFallbackToKuwo(song);
-      if (!ok) {
-        setState(prev => ({
-          ...prev,
-          paused: true,
-          buffering: false,
-          error: `暂时无法播放：${lastError?.message ?? '取链失败'}（酷我未收录该歌原版，可换一首试试）`,
-        }));
-        pendingSeekRef.current = null;
-      }
+      // 取链失败 → 明确报错（不自动换其他版本播放）
+      setState(prev => ({
+        ...prev,
+        paused: true,
+        buffering: false,
+        error: `播放失败：${lastError?.message ?? '取链失败'}`,
+      }));
+      pendingSeekRef.current = null;
       return;
     }
     applySong(index, queueList, api, url);
@@ -545,11 +533,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             const msg = typeof e === 'string' ? e : JSON.stringify(e);
             setState(prev => ({ ...prev, paused: true, buffering: false, error: `播放失败：${msg}` }));
             pendingSeekRef.current = null;
-            const song = state.song;
-            // 播放中地址失效 → 自动酷我同名兜底（同一首只试一次）
-            if (song && !fallbackTriedRef.current.has(songKeyOf(song))) {
-              void autoFallbackToKuwo(song);
-            }
           }}
           style={{ width: 0, height: 0, position: 'absolute' }}
         />
