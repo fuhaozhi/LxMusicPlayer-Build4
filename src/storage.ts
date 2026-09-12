@@ -29,6 +29,16 @@ export function save(key: string, value: unknown): void {
   }
 }
 
+/** 删除某个 key（用于清理缓存） */
+export function remove(key: string): void {
+  try {
+    mem.delete(key);
+    if (store) store.set({ [key]: '' });
+  } catch {
+    /* 删除失败不阻塞功能 */
+  }
+}
+
 export const KEYS = {
   recents: 'lx.recents',
   playlists: 'lx.playlists',

@@ -17,8 +17,6 @@ import { KEYS, load, save } from '../storage';
 import type { Collection } from '../types';
 
 const RED_DEEP = '#C62F2F';
-/** 封面缓存有效期（6 小时） */
-const COVER_TTL = 6 * 60 * 60 * 1000;
 
 interface CoverEntry {
   pic: string;
@@ -44,7 +42,7 @@ export default function ExploreScreen({
     const initStates: Record<string, 'ok' | 'fail'> = {};
     for (const c of EXPLORE_COLLECTIONS) {
       const e = cached[c.id];
-      if (e && e.pic && Date.now() - e.ts < COVER_TTL) {
+      if (e && e.pic) {
         initCovers[c.id] = e.pic;
         initStates[c.id] = 'ok';
       }

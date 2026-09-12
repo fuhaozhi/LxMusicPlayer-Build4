@@ -1,7 +1,7 @@
 /**
  * 设置 —— 音源管理：查看已添加音源、加载切换、删除、添加（自定义 URL 或内置推荐）。
  */
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { AVAILABLE_SOURCES, isValidSourceUrl } from '../sourceManager';
 import type { SourceManager } from '../sourceManager';
+import { KEYS, load, remove } from '../storage';
 
 export default function SettingsScreen({
   manager,
@@ -24,6 +25,32 @@ export default function SettingsScreen({
   const { sources, currentId, loading, message, loadSource, addSource, removeSource } = manager;
   const [customUrl, setCustomUrl] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
+  const [cacheInfo, setCacheInfo] = useState('读取中…');
+  const [cacheCleared, setCacheCleared] = useState(false);
+
+  const refreshCacheInfo = useCallback(() => {
+    try {
+      const c = load<Record<string, unknown>>(KEYS.collectionCache, {});
+      const v = load<Record<string, unknown>>(KEYS.coversCache, {});
+      const count = Object.keys(c).length;
+      const kb = (JSON.stringify(c).length + JSON.stringify(v).length) / 1024;
+      setCacheInfo(count > 0 ? `已缓存 ${count} 个歌单 · 约 ${kb.toFixed(0)} KB` : '暂无缓存');
+    } catch {
+      setCacheInfo('暂无缓存');
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshCacheInfo();
+  }, [refreshCacheInfo]);
+
+  const doClearCache = () => {
+    remove(KEYS.collectionCache);
+    remove(KEYS.coversCache);
+    refreshCacheInfo();
+    setCacheCleared(true);
+    setTimeout(() => setCacheCleared(false), 2000);
+  };
 
   const doAddCustom = () => {
     const res = addSource(customUrl);
@@ -177,6 +204,18 @@ export default function SettingsScreen({
           );
         })}
 
+        {/* 缓存管理 */}
+        <Text style={styles.sectionTitle}>缓存管理</Text>
+        <View style={styles.cacheBox}>
+          <View style={styles.cacheMain}>
+            <Text style={styles.cacheLabel}>歌单与封面缓存</Text>
+            <Text style={styles.cacheDesc}>{cacheCleared ? '已清理 ✓' : cacheInfo}</Text>
+          </View>
+          <Pressable style={styles.clearCacheBtn} onPress={doClearCache}>
+            <Text style={styles.clearCacheText}>清理缓存</Text>
+          </Pressable>
+        </View>
+
         <Text style={styles.about}>LxMusicPlayer · 自签 iOS 音乐播放器</Text>
       </ScrollView>
     </View>
@@ -297,4 +336,22 @@ const styles = StyleSheet.create({
   presetBtnText: { fontSize: 12, color: '#EC4141', fontWeight: '600' },
   presetBtnTextAdded: { color: '#B4B9C0' },
   about: { textAlign: 'center', fontSize: 11, color: '#C0C6CC', marginTop: 26 },
+  cacheBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 10,
+  },
+  cacheMain: { flex: 1 },
+  cacheLabel: { fontSize: 14, fontWeight: '600', color: '#1F2329' },
+  cacheDesc: { fontSize: 11, color: '#8A9099', marginTop: 3 },
+  clearCacheBtn: {
+    backgroundColor: '#FFF1F0',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  clearCacheText: { fontSize: 12, color: '#EC4141', fontWeight: '600' },
 });

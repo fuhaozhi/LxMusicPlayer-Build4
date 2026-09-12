@@ -7,10 +7,8 @@ import type { Collection, Song } from './types';
 import { KEYS, load, save } from './storage';
 
 const TIMEOUT_MS = 20_000;
-/** 歌单缓存有效期（6 小时） */
-const COLLECTION_TTL = 6 * 60 * 60 * 1000;
-/** 最多缓存多少个歌单（防止本地存储膨胀） */
-const MAX_CACHED = 8;
+/** 最多缓存多少个歌单（防止本地存储无限膨胀；无时间限制，手动清理） */
+const MAX_CACHED = 20;
 
 interface CollectionCacheEntry {
   songs: Song[];
@@ -118,11 +116,11 @@ export const EXPLORE_COLLECTIONS: Collection[] = [
   { id: 'tx-edm', name: 'QQ电音榜', desc: 'QQ 音乐 · 电子舞曲', source: 'tx', apiId: '36', hue: 260 },
 ];
 
-/** 根据合集拉取歌曲列表（带 6 小时本地缓存：秒开 + 断网可看已缓存歌单） */
+/** 根据合集拉取歌曲列表（本地缓存：无时间限制，秒开 + 断网可看；设置里可手动清理） */
 export async function fetchCollectionSongs(c: Collection): Promise<Song[]> {
   const cache = load<Record<string, CollectionCacheEntry>>(KEYS.collectionCache, {});
   const hit = cache[c.id];
-  if (hit && hit.songs.length > 0 && Date.now() - hit.ts < COLLECTION_TTL) {
+  if (hit && hit.songs.length > 0) {
     return hit.songs;
   }
 
