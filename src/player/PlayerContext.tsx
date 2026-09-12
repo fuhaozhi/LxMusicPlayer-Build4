@@ -61,6 +61,7 @@ const NowPlayingNative = NativeModules?.LxNowPlaying as
       setNowPlaying?: (info: any) => void;
       clearNowPlaying?: () => void;
       setCommandHandler?: (handler: ((events: any[]) => void) | null) => void;
+      keepSessionActive?: () => void;
     }
   | undefined;
 
@@ -115,6 +116,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const prefetchSeqRef = useRef(0);
   /** 播放失败已自动换源重试的歌曲（同一首只试一次，防死循环） */
   const fallbackTriedRef = useRef<Set<string>>(new Set());
+  /** 当前歌曲是否已触发后台保活（每首歌只触发一次） */
+  const bgKeepRef = useRef(false);
 
   const songKeyOf = (s: Song) => `${s.source}:${s.id}`;
 
@@ -191,6 +194,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     library.bumpPlay(song);
     library.addRecent(song);
     persistPlay(song, 0);
+    // 切歌后重置保活标记，下一首临近结束时重新触发
+    bgKeepRef.current = false;
     // 顺带预取下一首，熄屏/后台切歌直接走缓存
     void prefetchNext(index, queueList, api);
   };
@@ -496,6 +501,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             if (t < lastProgressRef.current - 1.5) return;
             lastProgressRef.current = t;
             setState(prev => ({ ...prev, currentTime: t }));
+            // 临近结尾（剩余 <6s）触发后台保活：保持音频会话 + 后台任务额度，
+            // 防止切歌空窗期（新歌网络加载中无声音输出）被系统挂起，导致后台不自动切下一首
+            if (!bgKeepRef.current && state.song && state.duration > 10 && t > state.duration - 6) {
+              bgKeepRef.current = true;
+              NowPlayingNative?.keepSessionActive?.();
+            }
             // 节流：每 10 秒把进度写入缓存（下次打开自动续播）
             const now = Date.now();
             if (state.song && now - lastPersistRef.current > 10_000) {
@@ -505,6 +516,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           }}
           onEnd={() => {
             library.bumpSeconds(state.duration);
+            // 播完瞬间再保活一次（万一临近结尾那 6 秒的进度事件被系统吃掉）
+            if (!bgKeepRef.current) {
+              bgKeepRef.current = true;
+              NowPlayingNative?.keepSessionActive?.();
+            }
             // 走统一 next()：优先预取 URL，后台/熄屏也能自动切下一首；末尾循环
             next();
           }}

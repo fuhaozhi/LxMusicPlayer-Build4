@@ -133,6 +133,8 @@ function Main() {
               }}
             />
           ) : null}
+          {/* 搜索/歌单/设置/报告页也常驻播放条（播放页本身除外），点击回到播放页 */}
+          {overlay.kind !== 'player' && state.song ? <PlayerBar onOpen={() => setOverlay({ kind: 'player' })} /> : null}
         </View>
       )}
     </View>

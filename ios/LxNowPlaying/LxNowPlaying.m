@@ -13,6 +13,7 @@
   double lastElapsed;
   double lastRate;
   BOOL hasProgress;
+  UIBackgroundTaskIdentifier bgTask;
 }
 
 RCT_EXPORT_MODULE()
@@ -48,6 +49,31 @@ RCT_EXPORT_METHOD(setCommandHandler:(RCTResponseSenderBlock)handler) {
   commandHandler = handler;
 }
 
+/// 后台切歌保活：歌曲临近结束时由 JS 调用。
+/// 保持音频会话激活 + 申请系统后台任务额度，避免新歌网络加载的空窗期
+/// （没有声音输出）被系统判定为"已停止播放"而挂起 App，导致后台不自动切歌。
+RCT_EXPORT_METHOD(keepSessionActive) {
+  NSError *err = nil;
+  [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback
+                                    withOptions:0
+                                          error:&err];
+  [[AVAudioSession sharedInstance] setActive:YES error:&err];
+  // 结束后台任务再重新申请，避免额度被上一次切歌耗尽
+  if (bgTask != UIBackgroundTaskInvalid) {
+    [[UIApplication sharedApplication] endBackgroundTask:bgTask];
+    bgTask = UIBackgroundTaskInvalid;
+  }
+  bgTask = [[UIApplication sharedApplication]
+      beginBackgroundTaskWithName:@"LxMusicNextTrack"
+                expirationHandler:^{
+                  if (self->bgTask != UIBackgroundTaskInvalid) {
+                    [[UIApplication sharedApplication]
+                        endBackgroundTask:self->bgTask];
+                    self->bgTask = UIBackgroundTaskInvalid;
+                  }
+                }];
+}
+
 /// 每秒按 rate 推进锁屏进度（保证进度条走动、拖动位置有基准）
 - (void)startProgressTimer {
   if (progressTimer) return;
@@ -75,6 +101,10 @@ RCT_EXPORT_METHOD(setCommandHandler:(RCTResponseSenderBlock)handler) {
   [progressTimer invalidate];
   progressTimer = nil;
   hasProgress = NO;
+  if (bgTask != UIBackgroundTaskInvalid) {
+    [[UIApplication sharedApplication] endBackgroundTask:bgTask];
+    bgTask = UIBackgroundTaskInvalid;
+  }
 }
 
 - (void)configureAudioSession {
