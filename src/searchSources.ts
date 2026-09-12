@@ -47,7 +47,11 @@ async function fetchJson(url: string, headers: Record<string, string> = {}): Pro
   }
 }
 
-/** 酷我音乐搜索（官方接口；播放走官方直链 antiserver.kuwo.cn，不依赖音源脚本） */
+/** 酷我音乐搜索（官方接口；播放走官方直链 antiserver.kuwo.cn，不依赖音源脚本）
+ *  排序优化：原版（无括号）优先，伴奏/KTV/DJ/现场/翻唱等版本沉底，避免搜到伴奏版 */
+/** 坏版本关键词（伴奏/KTV/DJ/现场/翻唱等），搜索与兜底播放时用于降权/排除 */
+export const BAD_VERSION = /伴奏|KTV|DJ|Remix|Live|现场|演唱会|cover|翻唱|纯音乐|混音|串烧|钢琴|吉他|萨克斯|轻音乐|小提琴|测试|铃声/i;
+
 export async function searchKuwo(kw: string): Promise<Song[]> {
   const url = `https://search.kuwo.cn/r.s?all=${encodeURIComponent(kw)}&ft=music&itemset=web_2013&pn=0&rn=50&rformat=json&encoding=utf8`;
   const data = await fetchJson(url, { Referer: 'https://www.kuwo.cn/' });
@@ -66,6 +70,11 @@ export async function searchKuwo(kw: string): Promise<Song[]> {
         interval: Number(it.DURATION ?? 0) || undefined,
         pic: it.web_albumpic_short ? String(it.web_albumpic_short) : undefined,
       };
+    })
+    .sort((a, b) => {
+      const ab = BAD_VERSION.test(a.name) ? 1 : 0;
+      const bb = BAD_VERSION.test(b.name) ? 1 : 0;
+      return ab - bb;
     });
 }
 
