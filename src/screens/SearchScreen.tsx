@@ -1,6 +1,6 @@
 /**
- * 搜索页：内置搜索源（酷我/腾讯/网易/咪咕）→ 点击播放（走当前音源脚本取链）
- * 浅色清新风：卡片式结果列表，支持加入自建歌单
+ * 搜索页：5 个搜索接口可选（酷我/酷狗/QQ/网易/咪咕）→ 点击播放（走当前音源脚本取链）
+ * 浅色清新风：接口一行排布、搜索历史、卡片式结果列表，支持加入自建歌单
  */
 import React, { useState } from 'react';
 import {
@@ -16,9 +16,12 @@ import {
 import { SEARCH_PICKER } from '../searchSources';
 import { usePlayer } from '../player/PlayerContext';
 import { useLibrary } from '../library';
+import { KEYS, load, save } from '../storage';
 import SongArt from '../components/SongArt';
 import type { LxMusicApi } from '../lx-api/index.js';
 import type { Song } from '../types';
+
+const HISTORY_MAX = 10;
 
 function SongCard({
   song,
@@ -66,6 +69,7 @@ export default function SearchScreen({
   const [sourceId, setSourceId] = useState('wy'); // 默认网易：取链最稳，避免点开放不了
   const [songs, setSongs] = useState<Song[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<string[]>(() => load<string[]>(KEYS.searchHistory, []));
   const [addTarget, setAddTarget] = useState<Song | null>(null);
   const [newName, setNewName] = useState('');
   const { play } = usePlayer();
@@ -73,22 +77,46 @@ export default function SearchScreen({
 
   const activeSource = SEARCH_PICKER.find(s => s.id === sourceId) ?? SEARCH_PICKER[0];
 
-  const doSearch = async () => {
-    const kw = keyword.trim();
-    if (!kw || searching) return;
+  const pushHistory = (kw: string) => {
+    const next = [kw, ...history.filter(h => h !== kw)].slice(0, HISTORY_MAX);
+    setHistory(next);
+    save(KEYS.searchHistory, next);
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+    save(KEYS.searchHistory, []);
+  };
+
+  const searchWith = async (src: { id: string; label: string; run: (kw: string) => Promise<Song[]> }, kw: string) => {
     setSearching(true);
-    setSearched(true);
     setError(null);
     try {
-      const list = await activeSource.run(kw);
+      const list = await src.run(kw);
       setSongs(list);
-      if (list.length === 0) setError('该音源没有搜到结果，换个关键词或换一个接口试试');
+      if (list.length === 0) {
+        setError('该接口没有搜到结果，换个关键词或换一个接口试试');
+      }
     } catch (e: any) {
       setSongs([]);
-      setError(`搜索失败：${e?.message ?? e}（可换一个接口试试）`);
+      const msg = e?.message ?? e;
+      // 咪咕官方网页搜索接口已下线，给明确提示，不再报无意义的 JSON 错误
+      const friendly = src.id === 'mg'
+        ? '咪咕接口暂不可用（官方已停用网页搜索），请切换其他接口'
+        : `搜索失败：${msg}（可换一个接口试试）`;
+      setError(friendly);
     } finally {
       setSearching(false);
     }
+  };
+
+  const doSearch = async (fromHistory = false) => {
+    const kw = keyword.trim();
+    if (!kw || searching) return;
+    setSearched(true);
+    pushHistory(kw);
+    await searchWith(activeSource, kw);
+    if (fromHistory) setKeyword(kw);
   };
 
   const switchSource = (id: string) => {
@@ -96,19 +124,7 @@ export default function SearchScreen({
     setSourceId(id);
     // 已搜过则用新接口重搜当前关键词
     if (searched && keyword.trim()) {
-      setSearching(true);
-      setError(null);
-      next
-        .run(keyword.trim())
-        .then(list => {
-          setSongs(list);
-          if (list.length === 0) setError('该音源没有搜到结果，换个关键词或换一个接口试试');
-        })
-        .catch((e: any) => {
-          setSongs([]);
-          setError(`搜索失败：${e?.message ?? e}（可换一个接口试试）`);
-        })
-        .finally(() => setSearching(false));
+      void searchWith(next, keyword.trim());
     }
   };
 
@@ -142,13 +158,13 @@ export default function SearchScreen({
           placeholder="搜索歌曲、歌手"
           placeholderTextColor="#B4B9C0"
           returnKeyType="search"
-          onSubmitEditing={doSearch}
+          onSubmitEditing={() => doSearch()}
           autoCorrect={false}
           autoCapitalize="none"
         />
         <Pressable
           style={[styles.searchBtn, searching && styles.searchBtnDisabled]}
-          onPress={doSearch}
+          onPress={() => doSearch()}
           disabled={searching}
         >
           {searching ? (
@@ -159,7 +175,7 @@ export default function SearchScreen({
         </Pressable>
       </View>
 
-      {/* 搜索接口选择：小蜗·酷我 / 小枸·酷狗 / 小秋·QQ / 小芸·网易 / 小蜜·咪咕 */}
+      {/* 搜索接口选择：酷我 / 酷狗 / QQ / 网易 / 咪咕（一行 5 个） */}
       <View style={styles.pickerRow}>
         {SEARCH_PICKER.map(s => {
           const active = s.id === sourceId;
@@ -169,7 +185,6 @@ export default function SearchScreen({
               style={[styles.chip, active && styles.chipActive]}
               onPress={() => switchSource(s.id)}
             >
-              <Text style={[styles.chipNick, active && styles.chipNickActive]}>{s.nick}</Text>
               <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{s.label}</Text>
             </Pressable>
           );
@@ -192,7 +207,7 @@ export default function SearchScreen({
           searched && songs.length > 0 ? (
             <View style={styles.resultInfo}>
               <Text style={styles.resultInfoText}>
-                {activeSource.nick} · {activeSource.label} 共 {songs.length} 首
+                {activeSource.label} · 共 {songs.length} 首
               </Text>
             </View>
           ) : undefined
@@ -209,12 +224,37 @@ export default function SearchScreen({
               <Text style={styles.emptyTitle}>{error}</Text>
               <Text style={styles.emptyHint}>换一个搜索接口试试</Text>
             </View>
+          ) : !searched && history.length > 0 ? (
+            <View style={styles.histWrap}>
+              <View style={styles.histHeader}>
+                <Text style={styles.histTitle}>搜索历史</Text>
+                <Pressable onPress={clearHistory} hitSlop={8}>
+                  <Text style={styles.histClear}>清空</Text>
+                </Pressable>
+              </View>
+              <View style={styles.histChips}>
+                {history.map(h => (
+                  <Pressable
+                    key={h}
+                    style={styles.histChip}
+                    onPress={() => {
+                      setKeyword(h);
+                      setSearched(true);
+                      pushHistory(h);
+                      void searchWith(activeSource, h);
+                    }}
+                  >
+                    <Text style={styles.histChipText} numberOfLines={1}>{h}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
           ) : (
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyNote}>♪</Text>
               <Text style={styles.emptyTitle}>{searched ? '没有找到结果' : '搜你想听的歌'}</Text>
               <Text style={styles.emptyHint}>
-                {searched ? '换个关键词或接口试试' : `当前接口：${activeSource.nick}·${activeSource.label}，点右侧 ＋ 可加入自建歌单`}
+                {searched ? '换个关键词或接口试试' : `当前接口：${activeSource.label}，点右侧 ＋ 可加入自建歌单`}
               </Text>
             </View>
           )
@@ -299,20 +339,17 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 16, paddingBottom: 24 },
   pickerRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 2,
   },
   chip: {
-    flexDirection: 'row',
+    flex: 1,
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingHorizontal: 13,
-    paddingVertical: 7,
-    gap: 5,
+    borderRadius: 12,
+    paddingVertical: 8,
     shadowColor: '#0A2540',
     shadowOpacity: 0.04,
     shadowRadius: 8,
@@ -320,12 +357,28 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   chipActive: { backgroundColor: '#00B578' },
-  chipNick: { fontSize: 13, color: '#8A9099', fontWeight: '600' },
-  chipNickActive: { color: '#FFFFFF' },
-  chipLabel: { fontSize: 12, color: '#B4B9C0' },
-  chipLabelActive: { color: '#E6F7F0' },
+  chipLabel: { fontSize: 14, color: '#5B6066', fontWeight: '600' },
+  chipLabelActive: { color: '#FFFFFF' },
   resultInfo: { flexDirection: 'row', alignItems: 'center', marginTop: 16, marginBottom: 10, gap: 6 },
   resultInfoText: { fontSize: 13, color: '#1F2329', fontWeight: '600' },
+  histWrap: { paddingTop: 26, paddingHorizontal: 4 },
+  histHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  histTitle: { fontSize: 15, color: '#1F2329', fontWeight: '700' },
+  histClear: { fontSize: 13, color: '#8A9099' },
+  histChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  histChip: {
+    maxWidth: '100%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    shadowColor: '#0A2540',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  histChipText: { fontSize: 13, color: '#5B6066' },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -356,7 +409,7 @@ const styles = StyleSheet.create({
   playBtnIcon: { fontSize: 13, color: '#00B578', marginLeft: 1 },
   emptyWrap: { alignItems: 'center', paddingTop: 90 },
   emptyNote: { fontSize: 52, color: '#DDE3E9' },
-  emptyTitle: { fontSize: 17, color: '#5B6066', fontWeight: '600', marginTop: 10 },
+  emptyTitle: { fontSize: 17, color: '#5B6066', fontWeight: '600', marginTop: 10, textAlign: 'center', paddingHorizontal: 20 },
   emptyHint: { fontSize: 13, color: '#B4B9C0', marginTop: 6 },
   mask: { flex: 1, backgroundColor: 'rgba(20,24,28,0.4)', justifyContent: 'flex-end' },
   sheet: {

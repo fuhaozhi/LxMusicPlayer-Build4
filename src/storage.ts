@@ -39,4 +39,6 @@ export const KEYS = {
   lastSource: 'lx.lastSource',
   /** 上次播放的歌曲 + 进度（启动自动续播） */
   lastPlay: 'lx.lastPlay',
+  /** 搜索历史（最多 10 条，点击可重搜） */
+  searchHistory: 'lx.searchHistory',
 } as const;

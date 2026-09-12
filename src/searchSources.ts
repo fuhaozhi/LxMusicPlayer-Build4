@@ -13,15 +13,35 @@ async function fetchJson(url: string, headers: Record<string, string> = {}): Pro
     const resp = await fetch(url, { headers: { Accept: 'application/json', ...headers }, signal: controller.signal });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const text = await resp.text();
+    // 1) 标准 JSON
     try {
       return JSON.parse(text);
     } catch {
-      // 某些接口返回 jsonp / 非标准 JSON，提取第一个 { 到最后一个 }
-      const start = text.indexOf('{');
-      const end = text.lastIndexOf('}');
-      if (start >= 0 && end > start) return JSON.parse(text.slice(start, end + 1));
-      throw new Error('非 JSON 响应');
+      /* 兼容处理 */
     }
+    // 2) JSONP / 括号包裹（jQuery123(...) 等）：剥掉首尾包裹再解析
+    try {
+      const inner = text.replace(/^[^(]*\(/, '').replace(/\)[^)]*$/, '');
+      return JSON.parse(inner);
+    } catch {
+      /* 继续 */
+    }
+    // 3) 单引号 JSON（酷我 r.s 接口返回 {'a':1}）：引号统一转双引号
+    try {
+      const quoted = text.replace(/'/g, '"');
+      return JSON.parse(quoted);
+    } catch {
+      /* 继续 */
+    }
+    // 4) 提取首个 { 到最后一个 }
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start >= 0 && end > start) return JSON.parse(text.slice(start, end + 1));
+    // 5) 提取数组
+    const as = text.indexOf('[');
+    const ae = text.lastIndexOf(']');
+    if (as >= 0 && ae > as) return JSON.parse(text.slice(as, ae + 1));
+    throw new Error('非 JSON 响应');
   } finally {
     clearTimeout(timer);
   }
@@ -29,7 +49,7 @@ async function fetchJson(url: string, headers: Record<string, string> = {}): Pro
 
 /** 酷我音乐搜索 */
 async function searchKuwo(kw: string): Promise<Song[]> {
-  const url = `https://search.kuwo.cn/r.s?all=${encodeURIComponent(kw)}&ft=music&itemset=web_2013&pn=0&rn=20&rformat=json&encoding=utf8`;
+  const url = `https://search.kuwo.cn/r.s?all=${encodeURIComponent(kw)}&ft=music&itemset=web_2013&pn=0&rn=50&rformat=json&encoding=utf8`;
   const data = await fetchJson(url, { Referer: 'https://www.kuwo.cn/' });
   const list: any[] = data?.abslist ?? data?.ABSLIST ?? [];
   return list
@@ -51,7 +71,7 @@ async function searchKuwo(kw: string): Promise<Song[]> {
 
 /** 腾讯音乐（QQ 音乐）搜索 */
 async function searchTencent(kw: string): Promise<Song[]> {
-  const url = `https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w=${encodeURIComponent(kw)}&format=json&p=1&n=20`;
+  const url = `https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w=${encodeURIComponent(kw)}&format=json&p=1&n=50`;
   const data = await fetchJson(url, { Referer: 'https://y.qq.com/' });
   const list: any[] = data?.data?.song?.list ?? [];
   return list
@@ -70,7 +90,7 @@ async function searchTencent(kw: string): Promise<Song[]> {
 
 /** 酷狗音乐搜索（搜索接口无需签名，直接 JSON；hash 即 FileHash，供取链） */
 async function searchKuGou(kw: string): Promise<Song[]> {
-  const url = `https://songsearch.kugou.com/song_search_v2?keyword=${encodeURIComponent(kw)}&page=1&pagesize=20&platform=WebFilter&userid=-1&clientver=2000&iscorrection=1`;
+  const url = `https://songsearch.kugou.com/song_search_v2?keyword=${encodeURIComponent(kw)}&page=1&pagesize=50&platform=WebFilter&userid=-1&clientver=2000&iscorrection=1`;
   const data = await fetchJson(url, {
     Referer: 'https://www.kugou.com/',
     'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
@@ -95,7 +115,7 @@ async function searchKuGou(kw: string): Promise<Song[]> {
 
 /** 网易云音乐搜索（可播源优先：qdy 音源网易取链实测稳定，播放失败自动换源也用它） */
 export async function searchNetease(kw: string): Promise<Song[]> {
-  const url = `https://music.163.com/api/search/get?s=${encodeURIComponent(kw)}&type=1&limit=20`;
+  const url = `https://music.163.com/api/search/get?s=${encodeURIComponent(kw)}&type=1&limit=50`;
   const data = await fetchJson(url, { Referer: 'https://music.163.com/', 'User-Agent': 'Mozilla/5.0' });
   const list: any[] = data?.result?.songs ?? [];
   return list
@@ -111,9 +131,9 @@ export async function searchNetease(kw: string): Promise<Song[]> {
     }));
 }
 
-/** 咪咕音乐搜索（需手机 UA） */
+/** 咪咕音乐搜索（官方网页搜索接口已下线，保留调用；失败由上层提示切换接口） */
 async function searchMigu(kw: string): Promise<Song[]> {
-  const url = `https://music.migu.cn/v3/api/search/v3?keyword=${encodeURIComponent(kw)}&pgc=1&rows=20&type=2`;
+  const url = `https://music.migu.cn/v3/api/search/v3?keyword=${encodeURIComponent(kw)}&pgc=1&rows=50&type=2`;
   const data = await fetchJson(url, {
     'User-Agent':
       'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
@@ -134,12 +154,12 @@ async function searchMigu(kw: string): Promise<Song[]> {
 }
 
 /** 搜索接口选择列表（音源脚本 qdy 支持 kw/kg/tx/wy/mg 取链，可播可搜） */
-export const SEARCH_PICKER: { id: string; nick: string; label: string; run: (kw: string) => Promise<Song[]> }[] = [
-  { id: 'kw', nick: '小蜗', label: '酷我', run: searchKuwo },
-  { id: 'kg', nick: '小枸', label: '酷狗', run: searchKuGou },
-  { id: 'tx', nick: '小秋', label: 'QQ', run: searchTencent },
-  { id: 'wy', nick: '小芸', label: '网易', run: searchNetease },
-  { id: 'mg', nick: '小蜜', label: '咪咕', run: searchMigu },
+export const SEARCH_PICKER: { id: string; label: string; run: (kw: string) => Promise<Song[]> }[] = [
+  { id: 'kw', label: '酷我', run: searchKuwo },
+  { id: 'kg', label: '酷狗', run: searchKuGou },
+  { id: 'tx', label: 'QQ', run: searchTencent },
+  { id: 'wy', label: '网易', run: searchNetease },
+  { id: 'mg', label: '咪咕', run: searchMigu },
 ];
 
 /** 全部搜索源（兼容旧调用），按顺序尝试；网易排最前（取链实测稳定，避免用户点到放不了的源） */

@@ -126,13 +126,9 @@
   }
   .cl-title { font-size: 14px; font-weight: 700; color: #00B578; margin-bottom: 8px; }
   .cl-item { font-size: 13px; color: #1F2329; line-height: 22px; }
-  .picker { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px 2px; }
-  .chip { display: flex; align-items: center; gap: 5px; background: #fff; border-radius: 20px; padding: 7px 13px; font-size: 13px; box-shadow: 0 1px 4px rgba(10,37,64,.05); }
-  .chip b { color: #8A9099; font-weight: 600; }
-  .chip span { color: #B4B9C0; font-size: 12px; }
-  .chip.on { background: #00B578; }
-  .chip.on b { color: #fff; }
-  .chip.on span { color: #E6F7F0; }
+  .picker { display: flex; gap: 6px; padding: 12px 16px 2px; }
+  .chip { flex: 1; text-align: center; background: #fff; border-radius: 12px; padding: 8px 0; font-size: 14px; font-weight: 600; color: #5B6066; box-shadow: 0 1px 4px rgba(10,37,64,.05); }
+  .chip.on { background: #00B578; color: #fff; }
   .sres { padding: 14px 16px 0; }
   .sres-info { font-size: 13px; color: #1F2329; font-weight: 600; margin-bottom: 10px; }
 </style>
@@ -253,14 +249,14 @@
         <div class="back-row"><span class="back" onclick="go('home')">‹</span><span class="back-title">搜索</span></div>
         <div class="searchbar"><span class="ph">搜索歌曲、歌手</span><span class="searchpill">搜索</span></div>
         <div class="picker">
-          <div class="chip" onclick="pick(this)"><b>小蜗</b><span>酷我</span></div>
-          <div class="chip" onclick="pick(this)"><b>小枸</b><span>酷狗</span></div>
-          <div class="chip" onclick="pick(this)"><b>小秋</b><span>QQ</span></div>
-          <div class="chip on" onclick="pick(this)"><b>小芸</b><span>网易</span></div>
-          <div class="chip" onclick="pick(this)"><b>小蜜</b><span>咪咕</span></div>
+          <div class="chip" onclick="pick(this)">酷我</div>
+          <div class="chip" onclick="pick(this)">酷狗</div>
+          <div class="chip" onclick="pick(this)">QQ</div>
+          <div class="chip on" onclick="pick(this)">网易</div>
+          <div class="chip" onclick="pick(this)">咪咕</div>
         </div>
         <div class="sres">
-          <div class="sres-info">小芸 · 网易 共 2 首</div>
+          <div class="sres-info">网易 · 共 2 首</div>
           <div class="recent" onclick="toast('播放：晴天')"><div class="rthumb" style="background-image:url('https://y.gtimg.cn/music/photo_new/T002R300x300M000000MkMni19ClKG.jpg');background-size:cover;background-position:center"></div><div class="rmain"><div class="rname">晴天</div><div class="rsinger">周杰伦 · 叶惠美</div></div><div class="rplay">▶</div></div>
           <div class="recent" onclick="toast('播放：稻香')"><div class="rthumb" style="background-image:url('https://y.gtimg.cn/music/photo_new/T002R300x300M000002Neh8l0uciQZ.jpg');background-size:cover;background-position:center"></div><div class="rmain"><div class="rname">稻香</div><div class="rsinger">周杰伦 · 魔杰座</div></div><div class="rplay">▶</div></div>
         </div>
@@ -295,6 +291,8 @@
     <div class="cl-item">· 搜索页、歌单页也常驻底部播放条，点歌即跳转播放</div>
     <div class="cl-item">· 修复：切歌瞬间进度条立即归零、锁屏进度同步清空，不再卡在上一首歌的时长</div>
     <div class="cl-item">· 搜索页新增 5 个搜索接口可选：小蜗·酷我 / 小枸·酷狗 / 小秋·QQ / 小芸·网易 / 小蜜·咪咕，点击即切换重搜</div>
+    <div class="cl-item">· 搜索接口改为直接显示名称（酷我/酷狗/QQ/网易/咪咕），一行排布；新增搜索历史（点击重搜、可清空）；每次最多 50 首</div>
+    <div class="cl-item">· 修复：酷我搜索（单引号 JSON 兼容）、咪咕提示友好化；酷狗/QQ 播放失败自动换网易同名重播</div>
   </div>
 
   <div class="tips">预览为示意效果（示例歌曲/数据），实际内容以搜索、音源脚本与合集接口返回为准</div>

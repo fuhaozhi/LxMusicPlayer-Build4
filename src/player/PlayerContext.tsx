@@ -533,8 +533,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             // 这首歌没播起来，作废待续播位置（防换源重试时错位 seek）
             pendingSeekRef.current = null;
             const song = state.song;
-            // 权限类错误（-1102 / 403 等）＝该源取到的地址已失效 → 自动换网易同名歌曲重试
-            if (song && song.source !== 'wy' && /-1102|permission|403|not allowed/i.test(msg)) {
+            // 播放失败自动兜底：该源取到的地址失效/被拒/无法加载 → 换网易同名歌曲重播
+            // （同一首只试一次，防死循环；网易取链实测稳定）
+            if (song && song.source !== 'wy' && !fallbackTriedRef.current.has(songKeyOf(song))) {
               void autoFallbackToNetease(song);
             }
           }}
