@@ -213,6 +213,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
+    if (song.source === 'tx') {
+      throw new Error('QQ 音乐限制未登录播放，可切换酷我接口搜索同名歌曲');
+    }
     throw new Error('音源暂不可用，无法播放这首歌');
   };
 
