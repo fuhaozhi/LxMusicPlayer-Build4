@@ -5,7 +5,7 @@
  */
 import type { Collection, Song } from './types';
 
-const TIMEOUT_MS = 8_000;
+const TIMEOUT_MS = 20_000;
 
 async function fetchJson(url: string, headers: Record<string, string> = {}): Promise<any> {
   const controller = new AbortController();

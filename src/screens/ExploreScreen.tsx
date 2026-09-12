@@ -1,9 +1,18 @@
 /**
  * 音乐馆 —— 网易云风格：红色渐变头部 + 热门音乐合集 2 列宫格
+ * 每个榜单卡片自动加载该榜单排名第一首歌的封面，加载失败回退彩色音符。
  */
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { EXPLORE_COLLECTIONS } from '../discover';
+import React, { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { EXPLORE_COLLECTIONS, fetchCollectionSongs } from '../discover';
 import type { Collection } from '../types';
 
 const RED_DEEP = '#C62F2F';
@@ -13,6 +22,40 @@ export default function ExploreScreen({
 }: {
   onOpenCollection: (c: Collection) => void;
 }) {
+  const [covers, setCovers] = useState<Record<string, string>>({});
+  const [coverState, setCoverState] = useState<Record<string, 'ok' | 'fail'>>({});
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const result: Record<string, string> = {};
+      const states: Record<string, 'ok' | 'fail'> = {};
+      await Promise.allSettled(
+        EXPLORE_COLLECTIONS.map(async c => {
+          try {
+            const songs = await fetchCollectionSongs(c);
+            const pic = songs[0]?.pic;
+            if (alive && pic) {
+              result[c.id] = pic;
+              states[c.id] = 'ok';
+            } else if (alive) {
+              states[c.id] = 'fail';
+            }
+          } catch {
+            if (alive) states[c.id] = 'fail';
+          }
+        }),
+      );
+      if (alive) {
+        setCovers(result);
+        setCoverState(states);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return (
     <View style={styles.container}>
       {/* 红色渐变头部 */}
@@ -24,27 +67,41 @@ export default function ExploreScreen({
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.grid}>
-          {EXPLORE_COLLECTIONS.map(c => (
-            <Pressable key={c.id} style={styles.card} onPress={() => onOpenCollection(c)}>
-              <View
-                style={[
-                  styles.cover,
-                  { backgroundColor: `hsl(${c.hue}, 70%, 92%)` },
-                ]}
-              >
-                <Text style={[styles.coverNote, { color: `hsl(${c.hue}, 55%, 40%)` }]}>♪</Text>
-                <View style={styles.coverMask}>
-                  <Text style={styles.coverTag} numberOfLines={1}>{c.name}</Text>
+          {EXPLORE_COLLECTIONS.map(c => {
+            const pic = covers[c.id];
+            const loading = pic === undefined && coverState[c.id] === undefined;
+            return (
+              <Pressable key={c.id} style={styles.card} onPress={() => onOpenCollection(c)}>
+                <View style={styles.coverWrap}>
+                  {pic ? (
+                    <Image source={{ uri: pic }} style={styles.coverImg} resizeMode="cover" />
+                  ) : (
+                    <View
+                      style={[
+                        styles.coverImg,
+                        { backgroundColor: `hsl(${c.hue}, 70%, 92%)` },
+                      ]}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color={`hsl(${c.hue}, 55%, 40%)`} size="small" />
+                      ) : (
+                        <Text style={[styles.coverNote, { color: `hsl(${c.hue}, 55%, 40%)` }]}>♪</Text>
+                      )}
+                    </View>
+                  )}
+                  <View style={styles.coverMask}>
+                    <Text style={styles.coverTag} numberOfLines={1}>{c.name}</Text>
+                  </View>
                 </View>
-              </View>
-              <Text style={styles.cardTitle} numberOfLines={1}>
-                {c.name}
-              </Text>
-              <Text style={styles.cardDesc} numberOfLines={1}>
-                {c.desc}
-              </Text>
-            </Pressable>
-          ))}
+                <Text style={styles.cardTitle} numberOfLines={1}>
+                  {c.name}
+                </Text>
+                <Text style={styles.cardDesc} numberOfLines={1}>
+                  {c.desc}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
       </ScrollView>
     </View>
@@ -74,17 +131,21 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 18, paddingBottom: 28 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
   card: { width: '48.5%', marginBottom: 16 },
-  cover: {
+  coverWrap: {
     height: 160,
     borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
     overflow: 'hidden',
     shadowColor: '#0A2540',
     shadowOpacity: 0.06,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
+  },
+  coverImg: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   coverNote: { fontSize: 56, opacity: 0.45 },
   coverMask: {
