@@ -1,38 +1,57 @@
 /**
- * 主页 —— 网易云手机端风格：红色渐变头部 + 搜索框 + 每日推荐横滑大卡 + 推荐歌单宫格
+ * 主页 —— 网易云 App 首页风格：
+ * 红色渐变头部 + 搜索框 + 每日推荐/心动模式/漫游 三入口卡
+ * +「根据你喜爱的歌曲推荐」横滑卡 +「猜你喜欢的华语好歌」列表
  */
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { HOME_COLLECTIONS } from '../discover';
-import type { Collection } from '../types';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { fetchCollectionSongs, HOME_COLLECTIONS } from '../discover';
+import { useLibrary } from '../library';
+import { usePlayer } from '../player/PlayerContext';
+import SongArt from '../components/SongArt';
+import type { LxMusicApi } from '../lx-api/index.js';
+import type { Collection, Song } from '../types';
 
 const RED = '#EC4141';
 const RED_DEEP = '#C62F2F';
 
-function Cover({ collection, size }: { collection: Collection; size: number }) {
-  return (
-    <View
-      style={[
-        styles.cover,
-        { width: size, height: size, backgroundColor: `hsl(${collection.hue}, 70%, 92%)` },
-      ]}
-    >
-      <Text style={[styles.coverNote, { color: `hsl(${collection.hue}, 55%, 40%)` }]}>♪</Text>
-      <Text style={[styles.coverTag, { color: `hsl(${collection.hue}, 55%, 40%)` }]} numberOfLines={1}>
-        {collection.name}
-      </Text>
-    </View>
-  );
-}
-
 export default function HomeScreen({
+  getApi,
   onSearch,
   onOpenCollection,
 }: {
+  getApi: () => LxMusicApi | null;
   onSearch: () => void;
   onOpenCollection: (c: Collection) => void;
 }) {
-  const [daily, ...grid] = HOME_COLLECTIONS;
+  const { recents } = useLibrary();
+  const { play } = usePlayer();
+  const [goodSongs, setGoodSongs] = useState<Song[]>([]);
+  const [goodLoading, setGoodLoading] = useState(false);
+
+  const daily = HOME_COLLECTIONS[0]; // 每日推荐·飙升榜
+  const heart = HOME_COLLECTIONS[1]; // 热歌榜
+  const roam = HOME_COLLECTIONS[2]; // 新歌榜
+
+  // 华语好歌：异步拉第一个推荐合集前 8 首
+  useEffect(() => {
+    let cancelled = false;
+    setGoodLoading(true);
+    fetchCollectionSongs(daily)
+      .then(list => {
+        if (!cancelled) setGoodSongs(list.slice(0, 8));
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setGoodLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loveSongs = recents.slice(0, 6);
 
   return (
     <View style={styles.container}>
@@ -52,63 +71,83 @@ export default function HomeScreen({
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* 每日推荐：横滑大卡 */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>每日推荐</Text>
-          <Text style={styles.sectionMore}>为你精选 ›</Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hscroll} contentContainerStyle={styles.hscrollContent}>
-          <Pressable
-            style={[styles.bigCard, { backgroundColor: `hsl(${daily.hue}, 55%, 82%)` }]}
-            onPress={() => onOpenCollection(daily)}
-          >
-            <Text style={styles.bigNote}>♪</Text>
-            <View style={styles.bigMain}>
-              <Text style={styles.bigTitle} numberOfLines={1}>{daily.name}</Text>
-              <Text style={styles.bigDesc} numberOfLines={2}>{daily.desc}</Text>
+        {/* 三入口卡 */}
+        <View style={styles.entryRow}>
+          <Pressable style={styles.entryCard} onPress={() => onOpenCollection(daily)}>
+            <View style={[styles.entryIcon, { backgroundColor: '#FDECEC' }]}>
+              <Text style={styles.entryIconText}>♪</Text>
             </View>
-            <Text style={styles.bigGo}>›</Text>
+            <Text style={styles.entryTitle}>每日推荐</Text>
+            <Text style={styles.entryDesc}>今日限定好歌</Text>
           </Pressable>
-          {grid.slice(0, 2).map(c => (
-            <Pressable
-              key={c.id}
-              style={[styles.bigCard, { backgroundColor: `hsl(${c.hue}, 55%, 82%)` }]}
-              onPress={() => onOpenCollection(c)}
-            >
-              <Text style={styles.bigNote}>♪</Text>
-              <View style={styles.bigMain}>
-                <Text style={styles.bigTitle} numberOfLines={1}>{c.name}</Text>
-                <Text style={styles.bigDesc} numberOfLines={2}>{c.desc}</Text>
-              </View>
-              <Text style={styles.bigGo}>›</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+          <Pressable style={styles.entryCard} onPress={() => onOpenCollection(heart)}>
+            <View style={[styles.entryIcon, { backgroundColor: '#FFF3E6' }]}>
+              <Text style={[styles.entryIconText, { color: '#F5A623' }]}>♥</Text>
+            </View>
+            <Text style={styles.entryTitle}>心动模式</Text>
+            <Text style={styles.entryDesc}>红心歌曲和相似推荐</Text>
+          </Pressable>
+          <Pressable style={styles.entryCard} onPress={() => onOpenCollection(roam)}>
+            <View style={[styles.entryIcon, { backgroundColor: '#E8F1FF' }]}>
+              <Text style={[styles.entryIconText, { color: '#3B7DD8' }]}>☁</Text>
+            </View>
+            <Text style={styles.entryTitle}>漫游</Text>
+            <Text style={styles.entryDesc}>多样频道无限</Text>
+          </Pressable>
+        </View>
 
-        {/* 推荐歌单宫格 */}
+        {/* 根据你喜爱的歌曲推荐 */}
+        {loveSongs.length > 0 ? (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>根据你喜爱的歌曲推荐</Text>
+              <Text style={styles.sectionMore}>更多 ›</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.hscroll} contentContainerStyle={styles.hscrollContent}>
+              {loveSongs.map(song => (
+                <Pressable key={`${song.source}:${song.id}`} style={styles.songCard} onPress={() => play(song, getApi(), loveSongs)}>
+                  <SongArt song={song} size={104} radius={12} />
+                  <Text style={styles.songCardName} numberOfLines={1}>
+                    {song.name}
+                  </Text>
+                  <Text style={styles.songCardSinger} numberOfLines={1}>
+                    {song.singer}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          </>
+        ) : null}
+
+        {/* 猜你喜欢的华语好歌 */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>推荐歌单</Text>
+          <Text style={styles.sectionTitle}>猜你喜欢的「华语」好歌</Text>
           <Text style={styles.sectionMore}>更多 ›</Text>
         </View>
-        <View style={styles.grid}>
-          {grid.slice(2).map(c => (
-            <Pressable key={c.id} style={styles.card} onPress={() => onOpenCollection(c)}>
-              <Cover collection={c} size={160} />
-              <Text style={styles.cardTitle} numberOfLines={1}>
-                {c.name}
-              </Text>
-              <Text style={styles.cardDesc} numberOfLines={1}>
-                {c.desc}
-              </Text>
+        {goodLoading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color={RED} />
+            <Text style={styles.loadingText}>正在为你推荐…</Text>
+          </View>
+        ) : (
+          goodSongs.map((song, i) => (
+            <Pressable key={`${song.source}:${song.id}`} style={styles.songRow} onPress={() => play(song, getApi(), goodSongs)}>
+              <Text style={styles.songIndex}>{i + 1}</Text>
+              <SongArt song={song} size={46} radius={8} />
+              <View style={styles.songMain}>
+                <Text style={styles.songName} numberOfLines={1}>
+                  {song.name}
+                </Text>
+                <Text style={styles.songSinger} numberOfLines={1}>
+                  {song.singer}
+                </Text>
+              </View>
+              <View style={styles.rowPlay}>
+                <Text style={styles.rowPlayIcon}>▶</Text>
+              </View>
             </Pressable>
-          ))}
-        </View>
-
-        <View style={styles.tipBox}>
-          <Text style={styles.tipText}>
-            提示：歌曲播放失败会自动切换酷我官方音源，保证能听
-          </Text>
-        </View>
+          ))
+        )}
       </ScrollView>
     </View>
   );
@@ -158,66 +197,63 @@ const styles = StyleSheet.create({
   searchPill: { backgroundColor: RED, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 8 },
   searchPillText: { fontSize: 13, color: '#fff', fontWeight: '600' },
   content: { paddingHorizontal: 16, paddingBottom: 28 },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    marginTop: 20,
-    marginBottom: 12,
-  },
-  sectionTitle: { fontSize: 19, fontWeight: '800', color: '#1F2329' },
-  sectionMore: { fontSize: 12, color: '#8A9099' },
-  hscroll: { marginHorizontal: -16 },
-  hscrollContent: { paddingHorizontal: 16, gap: 12 },
-  bigCard: {
-    width: 230,
-    height: 118,
+  entryRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  entryCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    padding: 14,
-    flexDirection: 'row',
+    paddingVertical: 14,
     alignItems: 'center',
     shadowColor: '#0A2540',
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
-  },
-  bigNote: { fontSize: 44, opacity: 0.35, marginRight: 4 },
-  bigMain: { flex: 1, minWidth: 0 },
-  bigTitle: { fontSize: 16, fontWeight: '800', color: '#1F2329' },
-  bigDesc: { fontSize: 11, color: '#5B6066', marginTop: 5, lineHeight: 15 },
-  bigGo: { fontSize: 24, color: 'rgba(0,0,0,0.25)', paddingLeft: 4 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  card: { width: '48.5%', marginBottom: 16 },
-  cover: {
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    shadowColor: '#0A2540',
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.05,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
-  coverNote: { fontSize: 52, opacity: 0.45 },
-  coverTag: {
-    position: 'absolute',
-    left: 8,
-    bottom: 8,
-    right: 8,
-    fontSize: 12,
-    fontWeight: '700',
-    opacity: 0.9,
+  entryIcon: { width: 38, height: 38, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  entryIconText: { fontSize: 18, color: RED },
+  entryTitle: { fontSize: 14, fontWeight: '700', color: '#1F2329', marginTop: 8 },
+  entryDesc: { fontSize: 10, color: '#B4B9C0', marginTop: 3 },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginTop: 22,
+    marginBottom: 12,
   },
-  cardTitle: { fontSize: 14, color: '#1F2329', fontWeight: '600', marginTop: 8 },
-  cardDesc: { fontSize: 11, color: '#B4B9C0', marginTop: 3 },
-  tipBox: {
-    marginTop: 6,
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#1F2329' },
+  sectionMore: { fontSize: 12, color: '#8A9099' },
+  hscroll: { marginHorizontal: -16 },
+  hscrollContent: { paddingHorizontal: 16, gap: 12 },
+  songCard: { width: 104, alignItems: 'flex-start' },
+  songCardName: { fontSize: 12, color: '#1F2329', fontWeight: '600', marginTop: 7, maxWidth: 104 },
+  songCardSinger: { fontSize: 10, color: '#8A9099', marginTop: 2, maxWidth: 104 },
+  loadingBox: { alignItems: 'center', paddingVertical: 30 },
+  loadingText: { fontSize: 12, color: '#B4B9C0', marginTop: 10 },
+  songRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 9,
+    marginBottom: 8,
+    shadowColor: '#0A2540',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  songIndex: { width: 26, fontSize: 14, color: '#C0C6CC', textAlign: 'center', fontWeight: '600' },
+  songMain: { flex: 1, paddingHorizontal: 10, minWidth: 0 },
+  songName: { fontSize: 14, color: '#1F2329', fontWeight: '500' },
+  songSinger: { fontSize: 11, color: '#8A9099', marginTop: 3 },
+  rowPlay: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: '#FDECEC',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  tipText: { fontSize: 12, color: '#C62F2F', lineHeight: 17 },
+  rowPlayIcon: { fontSize: 11, color: RED, marginLeft: 1 },
 });

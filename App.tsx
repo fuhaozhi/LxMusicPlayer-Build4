@@ -77,7 +77,7 @@ function Main() {
         <>
           <View style={styles.content}>
             {tab === 'home' ? (
-              <HomeScreen onSearch={() => setOverlay({ kind: 'search' })} onOpenCollection={openCollection} />
+              <HomeScreen getApi={manager.getApi} onSearch={() => setOverlay({ kind: 'search' })} onOpenCollection={openCollection} />
             ) : null}
             {tab === 'explore' ? <ExploreScreen onOpenCollection={openCollection} /> : null}
             {tab === 'mine' ? (
