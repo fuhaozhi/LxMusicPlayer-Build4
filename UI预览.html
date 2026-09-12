@@ -126,6 +126,15 @@
   }
   .cl-title { font-size: 14px; font-weight: 700; color: #00B578; margin-bottom: 8px; }
   .cl-item { font-size: 13px; color: #1F2329; line-height: 22px; }
+  .picker { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px 2px; }
+  .chip { display: flex; align-items: center; gap: 5px; background: #fff; border-radius: 20px; padding: 7px 13px; font-size: 13px; box-shadow: 0 1px 4px rgba(10,37,64,.05); }
+  .chip b { color: #8A9099; font-weight: 600; }
+  .chip span { color: #B4B9C0; font-size: 12px; }
+  .chip.on { background: #00B578; }
+  .chip.on b { color: #fff; }
+  .chip.on span { color: #E6F7F0; }
+  .sres { padding: 14px 16px 0; }
+  .sres-info { font-size: 13px; color: #1F2329; font-weight: 600; margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -238,6 +247,24 @@
         <div class="preset"><div class="pmain"><div class="pname">huibq</div><div class="purl">酷我/酷狗/腾讯/网易/咪咕 · 服务器已暂停</div></div><span class="pbtn">添加</span></div>
         <div class="preset"><div class="pmain"><div class="pname">ikun</div><div class="purl">酷我/网易 · 网易取链暂失效</div></div><span class="pbtn">添加</span></div>
       </div>
+
+      <!-- 搜索（可切换搜索接口） -->
+      <div class="page" id="p-search">
+        <div class="back-row"><span class="back" onclick="go('home')">‹</span><span class="back-title">搜索</span></div>
+        <div class="searchbar"><span class="ph">搜索歌曲、歌手</span><span class="searchpill">搜索</span></div>
+        <div class="picker">
+          <div class="chip" onclick="pick(this)"><b>小蜗</b><span>酷我</span></div>
+          <div class="chip" onclick="pick(this)"><b>小枸</b><span>酷狗</span></div>
+          <div class="chip" onclick="pick(this)"><b>小秋</b><span>QQ</span></div>
+          <div class="chip on" onclick="pick(this)"><b>小芸</b><span>网易</span></div>
+          <div class="chip" onclick="pick(this)"><b>小蜜</b><span>咪咕</span></div>
+        </div>
+        <div class="sres">
+          <div class="sres-info">小芸 · 网易 共 2 首</div>
+          <div class="recent" onclick="toast('播放：晴天')"><div class="rthumb" style="background-image:url('https://y.gtimg.cn/music/photo_new/T002R300x300M000000MkMni19ClKG.jpg');background-size:cover;background-position:center"></div><div class="rmain"><div class="rname">晴天</div><div class="rsinger">周杰伦 · 叶惠美</div></div><div class="rplay">▶</div></div>
+          <div class="recent" onclick="toast('播放：稻香')"><div class="rthumb" style="background-image:url('https://y.gtimg.cn/music/photo_new/T002R300x300M000002Neh8l0uciQZ.jpg');background-size:cover;background-position:center"></div><div class="rmain"><div class="rname">稻香</div><div class="rsinger">周杰伦 · 魔杰座</div></div><div class="rplay">▶</div></div>
+        </div>
+      </div>
     </div>
 
     <div class="playerbar" onclick="toast('进入播放页')">
@@ -267,6 +294,7 @@
     <div class="cl-item">· 修复：后台 / 熄屏播放会自动切下一首（切歌时保持系统后台运行）</div>
     <div class="cl-item">· 搜索页、歌单页也常驻底部播放条，点歌即跳转播放</div>
     <div class="cl-item">· 修复：切歌瞬间进度条立即归零、锁屏进度同步清空，不再卡在上一首歌的时长</div>
+    <div class="cl-item">· 搜索页新增 5 个搜索接口可选：小蜗·酷我 / 小枸·酷狗 / 小秋·QQ / 小芸·网易 / 小蜜·咪咕，点击即切换重搜</div>
   </div>
 
   <div class="tips">预览为示意效果（示例歌曲/数据），实际内容以搜索、音源脚本与合集接口返回为准</div>
@@ -280,7 +308,12 @@
       }
       document.getElementById('p-' + name).classList.add('active');
     }
-    function goSearch() { toast('点击后进入全屏搜索页'); }
+    function goSearch() { go('search'); }
+    function pick(el) {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('on'));
+      el.classList.add('on');
+      toast('已切换到该搜索接口');
+    }
     function toast(msg) { alert(msg); }
   </script>
 </body>

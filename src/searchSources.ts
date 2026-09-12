@@ -68,6 +68,31 @@ async function searchTencent(kw: string): Promise<Song[]> {
     }));
 }
 
+/** 酷狗音乐搜索（搜索接口无需签名，直接 JSON；hash 即 FileHash，供取链） */
+async function searchKuGou(kw: string): Promise<Song[]> {
+  const url = `https://songsearch.kugou.com/song_search_v2?keyword=${encodeURIComponent(kw)}&page=1&pagesize=20&platform=WebFilter&userid=-1&clientver=2000&iscorrection=1`;
+  const data = await fetchJson(url, {
+    Referer: 'https://www.kugou.com/',
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+  });
+  const list: any[] = data?.data?.lists ?? [];
+  return list
+    .filter((it: any) => it?.FileHash)
+    .map((it: any) => {
+      const hash = String(it.FileHash);
+      return {
+        source: 'kg',
+        id: hash,
+        hash,
+        name: String(it.SongName ?? it.SongName ?? ''),
+        singer: String(it.SingerName ?? ''),
+        album: it.AlbumName ? String(it.AlbumName) : undefined,
+        interval: Number(it.Duration ?? 0) || undefined,
+        pic: `https://imgessl.kugou.com/stdmusic/250/${hash}.jpg`,
+      };
+    });
+}
+
 /** 网易云音乐搜索（可播源优先：qdy 音源网易取链实测稳定，播放失败自动换源也用它） */
 export async function searchNetease(kw: string): Promise<Song[]> {
   const url = `https://music.163.com/api/search/get?s=${encodeURIComponent(kw)}&type=1&limit=20`;
@@ -108,13 +133,19 @@ async function searchMigu(kw: string): Promise<Song[]> {
     }));
 }
 
-/** 全部搜索源，按顺序尝试；网易排最前（取链实测稳定，避免用户点到放不了的源） */
-export const SEARCH_SOURCES: { id: string; label: string; run: (kw: string) => Promise<Song[]> }[] = [
-  { id: 'wy', label: '网易', run: searchNetease },
-  { id: 'tx', label: '腾讯', run: searchTencent },
-  { id: 'kw', label: '酷我', run: searchKuwo },
-  { id: 'mg', label: '咪咕', run: searchMigu },
+/** 搜索接口选择列表（音源脚本 qdy 支持 kw/kg/tx/wy/mg 取链，可播可搜） */
+export const SEARCH_PICKER: { id: string; nick: string; label: string; run: (kw: string) => Promise<Song[]> }[] = [
+  { id: 'kw', nick: '小蜗', label: '酷我', run: searchKuwo },
+  { id: 'kg', nick: '小枸', label: '酷狗', run: searchKuGou },
+  { id: 'tx', nick: '小秋', label: 'QQ', run: searchTencent },
+  { id: 'wy', nick: '小芸', label: '网易', run: searchNetease },
+  { id: 'mg', nick: '小蜜', label: '咪咕', run: searchMigu },
 ];
+
+/** 全部搜索源（兼容旧调用），按顺序尝试；网易排最前（取链实测稳定，避免用户点到放不了的源） */
+export const SEARCH_SOURCES: { id: string; label: string; run: (kw: string) => Promise<Song[]> }[] = SEARCH_PICKER.map(
+  s => ({ id: s.id, label: s.label, run: s.run }),
+);
 
 /** 并行搜索全部源，返回成功源的合集（带来源标签） */
 export async function searchAll(kw: string): Promise<{ source: string; label: string; songs: Song[] }[]> {

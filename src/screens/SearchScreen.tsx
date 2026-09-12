@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { searchAll } from '../searchSources';
+import { SEARCH_PICKER } from '../searchSources';
 import { usePlayer } from '../player/PlayerContext';
 import { useLibrary } from '../library';
 import SongArt from '../components/SongArt';
@@ -63,22 +63,52 @@ export default function SearchScreen({
   const [keyword, setKeyword] = useState('');
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
-  const [groups, setGroups] = useState<{ source: string; label: string; songs: Song[] }[]>([]);
+  const [sourceId, setSourceId] = useState('wy'); // 默认网易：取链最稳，避免点开放不了
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const [addTarget, setAddTarget] = useState<Song | null>(null);
   const [newName, setNewName] = useState('');
   const { play } = usePlayer();
   const { playlists, createPlaylist, addSongToPlaylist } = useLibrary();
+
+  const activeSource = SEARCH_PICKER.find(s => s.id === sourceId) ?? SEARCH_PICKER[0];
 
   const doSearch = async () => {
     const kw = keyword.trim();
     if (!kw || searching) return;
     setSearching(true);
     setSearched(true);
+    setError(null);
     try {
-      const results = await searchAll(kw);
-      setGroups(results);
+      const list = await activeSource.run(kw);
+      setSongs(list);
+      if (list.length === 0) setError('该音源没有搜到结果，换个关键词或换一个接口试试');
+    } catch (e: any) {
+      setSongs([]);
+      setError(`搜索失败：${e?.message ?? e}（可换一个接口试试）`);
     } finally {
       setSearching(false);
+    }
+  };
+
+  const switchSource = (id: string) => {
+    const next = SEARCH_PICKER.find(s => s.id === id) ?? SEARCH_PICKER[0];
+    setSourceId(id);
+    // 已搜过则用新接口重搜当前关键词
+    if (searched && keyword.trim()) {
+      setSearching(true);
+      setError(null);
+      next
+        .run(keyword.trim())
+        .then(list => {
+          setSongs(list);
+          if (list.length === 0) setError('该音源没有搜到结果，换个关键词或换一个接口试试');
+        })
+        .catch((e: any) => {
+          setSongs([]);
+          setError(`搜索失败：${e?.message ?? e}（可换一个接口试试）`);
+        })
+        .finally(() => setSearching(false));
     }
   };
 
@@ -129,44 +159,62 @@ export default function SearchScreen({
         </Pressable>
       </View>
 
+      {/* 搜索接口选择：小蜗·酷我 / 小枸·酷狗 / 小秋·QQ / 小芸·网易 / 小蜜·咪咕 */}
+      <View style={styles.pickerRow}>
+        {SEARCH_PICKER.map(s => {
+          const active = s.id === sourceId;
+          return (
+            <Pressable
+              key={s.id}
+              style={[styles.chip, active && styles.chipActive]}
+              onPress={() => switchSource(s.id)}
+            >
+              <Text style={[styles.chipNick, active && styles.chipNickActive]}>{s.nick}</Text>
+              <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>{s.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <FlatList
-        data={groups}
-        keyExtractor={g => g.source}
+        data={songs}
+        keyExtractor={(song, i) => `${song.source}-${song.id}-${i}`}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.listContent}
-        renderItem={({ item: group }) => (
-          <View style={styles.group}>
-            <View style={styles.groupHeader}>
-              <View style={styles.groupDot} />
-              <Text style={styles.groupLabel}>{group.label}</Text>
-              <Text style={styles.groupCount}>{group.songs.length} 首</Text>
-            </View>
-            {group.songs.length === 0 ? (
-              <Text style={styles.groupEmpty}>该源暂无结果</Text>
-            ) : (
-              group.songs.map(song => (
-                <SongCard
-                  key={`${group.source}-${song.id}`}
-                  song={song}
-                  onPlay={() => play(song, getApi(), group.songs)}
-                  onAdd={() => setAddTarget(song)}
-                />
-              ))
-            )}
-          </View>
+        renderItem={({ item: song }) => (
+          <SongCard
+            song={song}
+            onPlay={() => play(song, getApi(), songs)}
+            onAdd={() => setAddTarget(song)}
+          />
         )}
+        ListHeaderComponent={
+          searched && songs.length > 0 ? (
+            <View style={styles.resultInfo}>
+              <Text style={styles.resultInfoText}>
+                {activeSource.nick} · {activeSource.label} 共 {songs.length} 首
+              </Text>
+            </View>
+          ) : undefined
+        }
         ListEmptyComponent={
           searching ? (
             <View style={styles.emptyWrap}>
               <ActivityIndicator color="#00B578" />
               <Text style={styles.emptyHint}>正在搜索「{keyword.trim()}」…</Text>
             </View>
+          ) : error ? (
+            <View style={styles.emptyWrap}>
+              <Text style={styles.emptyNote}>♪</Text>
+              <Text style={styles.emptyTitle}>{error}</Text>
+              <Text style={styles.emptyHint}>换一个搜索接口试试</Text>
+            </View>
           ) : (
             <View style={styles.emptyWrap}>
               <Text style={styles.emptyNote}>♪</Text>
               <Text style={styles.emptyTitle}>{searched ? '没有找到结果' : '搜你想听的歌'}</Text>
               <Text style={styles.emptyHint}>
-                {searched ? '换个关键词试试' : '点右侧 ＋ 可加入自建歌单'}
+                {searched ? '换个关键词或接口试试' : `当前接口：${activeSource.nick}·${activeSource.label}，点右侧 ＋ 可加入自建歌单`}
               </Text>
             </View>
           )
@@ -249,12 +297,35 @@ const styles = StyleSheet.create({
   searchBtnDisabled: { opacity: 0.6 },
   searchBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   listContent: { paddingHorizontal: 16, paddingBottom: 24 },
-  group: { marginTop: 16 },
-  groupHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 6 },
-  groupDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#00B578' },
-  groupLabel: { fontSize: 14, color: '#1F2329', fontWeight: '600' },
-  groupCount: { fontSize: 12, color: '#B4B9C0' },
-  groupEmpty: { fontSize: 13, color: '#8A9099', paddingVertical: 12, paddingLeft: 12 },
+  pickerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 2,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    gap: 5,
+    shadowColor: '#0A2540',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  chipActive: { backgroundColor: '#00B578' },
+  chipNick: { fontSize: 13, color: '#8A9099', fontWeight: '600' },
+  chipNickActive: { color: '#FFFFFF' },
+  chipLabel: { fontSize: 12, color: '#B4B9C0' },
+  chipLabelActive: { color: '#E6F7F0' },
+  resultInfo: { flexDirection: 'row', alignItems: 'center', marginTop: 16, marginBottom: 10, gap: 6 },
+  resultInfoText: { fontSize: 13, color: '#1F2329', fontWeight: '600' },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
