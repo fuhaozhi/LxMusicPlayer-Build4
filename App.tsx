@@ -33,8 +33,37 @@ type Overlay =
 const TABS: { id: Tab; label: string; icon: string; iconActive: string }[] = [
   { id: 'home', label: '主页', icon: '⌂', iconActive: '⌂' },
   { id: 'explore', label: '音乐馆', icon: '♪', iconActive: '♪' },
-  { id: 'mine', label: '我的', icon: '☺', iconActive: '☺' },
+  { id: 'mine', label: '我的', icon: '', iconActive: '' },
 ];
+
+/** 「我的」简洁人形线条图标（圆头 + 拱肩），避免表情符号 */
+function MineIcon({ color }: { color: string }) {
+  return (
+    <View style={{ width: 22, height: 21, alignItems: 'center', justifyContent: 'center' }}>
+      <View
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          borderWidth: 1.6,
+          borderColor: color,
+        }}
+      />
+      <View
+        style={{
+          width: 17,
+          height: 10,
+          borderTopLeftRadius: 8.5,
+          borderTopRightRadius: 8.5,
+          borderWidth: 1.6,
+          borderBottomWidth: 0,
+          borderColor: color,
+          marginTop: 1,
+        }}
+      />
+    </View>
+  );
+}
 
 function Main() {
   const insets = useSafeAreaInsets();
@@ -96,9 +125,13 @@ function Main() {
               const active = tab === t.id;
               return (
                 <Pressable key={t.id} style={styles.tabItem} onPress={() => setTab(t.id)}>
-                  <Text style={[styles.tabIcon, active && styles.tabIconActive]}>
-                    {active ? t.iconActive : t.icon}
-                  </Text>
+                  {t.id === 'mine' ? (
+                    <MineIcon color={active ? '#EC4141' : '#8A9099'} />
+                  ) : (
+                    <Text style={[styles.tabIcon, active && styles.tabIconActive]}>
+                      {active ? t.iconActive : t.icon}
+                    </Text>
+                  )}
                   <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{t.label}</Text>
                 </Pressable>
               );

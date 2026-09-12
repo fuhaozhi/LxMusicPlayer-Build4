@@ -28,11 +28,46 @@ import type { LyricInfo } from '../lx-api/types.js';
 const LINE_H = 30;
 const RED = '#EC4141';
 
-/** 播放模式图标与名称 */
-const MODE_META: Record<PlayMode, { icon: string; name: string }> = {
-  order: { icon: '🔁', name: '顺序播放' },
-  single: { icon: '🔂', name: '单曲循环' },
-  random: { icon: '🔀', name: '随机播放' },
+/** 简洁线条播放模式图标（顺序=三线列表 / 单曲=圆环+1 / 随机=交叉箭头） */
+function ModeIcon({ mode, color }: { mode: PlayMode; color: string }) {
+  if (mode === 'order') {
+    return (
+      <View style={{ width: 20, height: 14, justifyContent: 'space-between' }}>
+        <View style={{ height: 2, borderRadius: 1, backgroundColor: color }} />
+        <View style={{ height: 2, borderRadius: 1, backgroundColor: color }} />
+        <View style={{ height: 2, borderRadius: 1, backgroundColor: color }} />
+      </View>
+    );
+  }
+  if (mode === 'single') {
+    return (
+      <View
+        style={{
+          width: 20,
+          height: 20,
+          borderWidth: 2,
+          borderColor: color,
+          borderRadius: 10,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Text style={{ fontSize: 10, fontWeight: '700', color }}>1</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={{ width: 20, height: 16, alignItems: 'center', justifyContent: 'center' }}>
+      <Text style={{ fontSize: 15, fontWeight: '700', color }}>⇄</Text>
+    </View>
+  );
+}
+
+/** 播放模式名称 */
+const MODE_META: Record<PlayMode, { name: string }> = {
+  order: { name: '顺序播放' },
+  single: { name: '单曲循环' },
+  random: { name: '随机播放' },
 };
 
 export default function NowPlayingScreen({
@@ -281,7 +316,7 @@ export default function NowPlayingScreen({
         <View style={styles.controlsRow}>
           {/* 播放模式（左） */}
           <Pressable style={styles.sideBtn} onPress={cycleMode} hitSlop={8}>
-            <Text style={styles.sideBtnIcon}>{modeMeta.icon}</Text>
+            <ModeIcon mode={mode} color={mode === 'order' ? '#8A9099' : RED} />
             <Text style={styles.sideBtnText}>{modeMeta.name}</Text>
           </Pressable>
 

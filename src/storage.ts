@@ -43,4 +43,6 @@ export const KEYS = {
   searchHistory: 'lx.searchHistory',
   /** 播放模式：order/single/random */
   playMode: 'lx.playMode',
+  /** 歌单 / 榜单数据缓存（离线可看列表 + 秒开） */
+  collectionCache: 'lx.cache.collections',
 } as const;
