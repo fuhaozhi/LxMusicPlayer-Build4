@@ -187,10 +187,28 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  /** 酷狗官方直链：m.kugou.com playInfo 返回真实音频地址（官方接口，不依赖音源脚本） */
+  const kugouDirectUrl = async (hash: string): Promise<string> => {
+    const url = `https://m.kugou.com/app/i/getSongInfo.php?cmd=playInfo&hash=${encodeURIComponent(hash)}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12_000);
+    try {
+      const resp = await fetch(url, { signal: controller.signal });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const j = await resp.json();
+      const u: string = j?.url || j?.backup_url?.[0] || '';
+      if (!/^https?:\/\//.test(u)) throw new Error('酷狗返回异常');
+      return u;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
   /**
    * 统一取播放地址：点什么歌就播什么歌
    * - 酷我：官方直链（antiserver.kuwo.cn）
-   * - 酷狗/QQ/网易：走音源脚本原源取链，失败即明确报错，不自动换成其他版本
+   * - 酷狗：官方直链（m.kugou.com playInfo），失败落回音源脚本
+   * - 网易/QQ：走音源脚本原源取链，失败即明确报错，不自动换成其他版本
    */
   const resolvePlayUrl = async (song: Song, api: LxMusicApi | null): Promise<string> => {
     if (song.source === 'kw' && song.hash) {
@@ -198,6 +216,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         return await kuwoDirectUrl(song.hash);
       } catch {
         throw new Error('酷我官方直链暂不可用，请稍后再试');
+      }
+    }
+    if (song.source === 'kg' && song.hash) {
+      try {
+        return await kugouDirectUrl(song.hash);
+      } catch {
+        /* 官方直链失败，落回音源脚本尝试 */
       }
     }
     if (api) {
