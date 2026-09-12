@@ -8,7 +8,9 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { NativeModules } from 'react-native';
 import Video from 'react-native-video';
-import type { LxMusicApi } from '../lx-api/index.js';
+import { LxMusicApi } from '../lx-api/index.js';
+import type { LxMusicApi as LxMusicApiType } from '../lx-api/index.js';
+import { NIANXIN_SCRIPT, SUYIN_SCRIPT } from '../lx-api/builtinSources';
 import type { PlayerState, Song } from '../types';
 import { toMusicInfo } from '../sourceManager';
 import { useLibrary } from '../library';
@@ -107,6 +109,24 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   /** 预取的下一首播放地址（熄屏/后台切歌用） */
   const prefetchRef = useRef<{ songKey: string; url: string } | null>(null);
   const prefetchSeqRef = useRef(0);
+  /** 内置音源（念心：QQ/酷狗 VIP 完整版；溯音：酷我 VIP 完整版）懒加载实例 */
+  const builtinApiRef = useRef<{ nianxin?: LxMusicApiType; suyin?: LxMusicApiType }>({});
+  /** 懒加载内置音源 API（本地脚本字符串，不依赖网络下载；失败返回 null 不阻塞播放） */
+  const getBuiltinApi = async (which: 'nianxin' | 'suyin'): Promise<LxMusicApiType | null> => {
+    if (!builtinApiRef.current[which]) {
+      try {
+        const script = which === 'nianxin' ? NIANXIN_SCRIPT : SUYIN_SCRIPT;
+        builtinApiRef.current[which] = await LxMusicApi.fromScript(script, {
+          initTimeout: 12_000,
+          requestTimeout: 15_000,
+          logger: () => {},
+        });
+      } catch {
+        return null;
+      }
+    }
+    return builtinApiRef.current[which] ?? null;
+  };
   /** 当前歌曲是否已触发后台保活（每首歌只触发一次） */
   const bgKeepRef = useRef(false);
   /** 播放模式（持久化 + ref 同步，onEnd/next 内用 ref 避免闭包旧值） */
@@ -226,17 +246,31 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * 统一取播放地址：点什么歌就播什么歌
-   * - 酷我：官方直链（antiserver.kuwo.cn）
-   * - 酷狗：官方直链（m.kugou.com playInfo），失败落回音源脚本
-   * - 网易：官方直链（enhance/player/url），失败落回音源脚本
-   * - QQ：走音源脚本原源取链，失败即明确报错，不自动换成其他版本
+   * 内置音源优先（实测 VIP 完整播放）：
+   * - 酷我：溯音内置（完整版）→ 官方直链 → 音源脚本
+   * - QQ：念心内置（完整版）→ 音源脚本 → 明确报错
+   * - 酷狗：念心内置（完整版）→ 官方直链 → 音源脚本
+   * - 网易：官方直链 → 念心内置(wy) → 音源脚本
    */
-  const resolvePlayUrl = async (song: Song, api: LxMusicApi | null): Promise<string> => {
+  const resolvePlayUrl = async (song: Song, api: LxMusicApiType | null): Promise<string> => {
+    // 1) 内置音源优先：酷我→溯音；QQ/酷狗→念心
+    if (song.source === 'kw' || song.source === 'tx' || song.source === 'kg') {
+      try {
+        const builtin = await getBuiltinApi(song.source === 'kw' ? 'suyin' : 'nianxin');
+        if (builtin) {
+          const res = await builtin.getMusicUrl(song.source, toMusicInfo(song), '128k');
+          if (res?.url) return res.url;
+        }
+      } catch {
+        /* 内置音源失败，走官方直链/脚本兜底 */
+      }
+    }
+    // 2) 官方直链（不依赖音源脚本）
     if (song.source === 'kw' && song.hash) {
       try {
         return await kuwoDirectUrl(song.hash);
       } catch {
-        throw new Error('酷我官方直链暂不可用，请稍后再试');
+        /* 官方直链失败，继续尝试 */
       }
     }
     if (song.source === 'kg' && song.hash) {
@@ -253,6 +287,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         /* 官方直链失败，落回音源脚本尝试 */
       }
     }
+    // 3) 用户选择的音源脚本
     if (api) {
       const cap = api.getSource(song.source);
       if (cap?.actions.includes('musicUrl')) {
@@ -267,7 +302,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
     }
     if (song.source === 'tx') {
-      throw new Error('QQ 音乐限制未登录播放，可切换酷我接口搜索同名歌曲');
+      throw new Error('QQ 音乐当前音源不可用，请稍后重试');
     }
     throw new Error('音源暂不可用，无法播放这首歌');
   };
