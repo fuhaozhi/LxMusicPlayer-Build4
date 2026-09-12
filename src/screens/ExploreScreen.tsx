@@ -13,9 +13,19 @@ import {
   View,
 } from 'react-native';
 import { EXPLORE_COLLECTIONS, fetchCollectionSongs } from '../discover';
+import { KEYS, load, save } from '../storage';
 import type { Collection } from '../types';
 
 const RED_DEEP = '#C62F2F';
+/** 封面缓存有效期（6 小时） */
+const COVER_TTL = 6 * 60 * 60 * 1000;
+
+interface CoverEntry {
+  pic: string;
+  name: string;
+  singer: string;
+  ts: number;
+}
 
 export default function ExploreScreen({
   onOpenCollection,
@@ -27,17 +37,37 @@ export default function ExploreScreen({
 
   useEffect(() => {
     let alive = true;
+
+    // 1) 先读本地缓存立即显示封面（打开秒显，不等待网络）
+    const cached = load<Record<string, CoverEntry>>(KEYS.coversCache, {});
+    const initCovers: Record<string, string> = {};
+    const initStates: Record<string, 'ok' | 'fail'> = {};
+    for (const c of EXPLORE_COLLECTIONS) {
+      const e = cached[c.id];
+      if (e && e.pic && Date.now() - e.ts < COVER_TTL) {
+        initCovers[c.id] = e.pic;
+        initStates[c.id] = 'ok';
+      }
+    }
+    if (alive) {
+      setCovers(initCovers);
+      setCoverState(initStates);
+    }
+
+    // 2) 后台静默刷新（命中歌单缓存时极快；有更新则落盘）
     (async () => {
-      const result: Record<string, string> = {};
+      const result: Record<string, string> = { ...initCovers };
       const states: Record<string, 'ok' | 'fail'> = {};
+      const entries: Record<string, CoverEntry> = {};
       await Promise.allSettled(
         EXPLORE_COLLECTIONS.map(async c => {
           try {
             const songs = await fetchCollectionSongs(c);
-            const pic = songs[0]?.pic;
-            if (alive && pic) {
-              result[c.id] = pic;
+            const s0 = songs[0];
+            if (alive && s0?.pic) {
+              result[c.id] = s0.pic;
               states[c.id] = 'ok';
+              entries[c.id] = { pic: s0.pic, name: s0.name, singer: s0.singer, ts: Date.now() };
             } else if (alive) {
               states[c.id] = 'fail';
             }
@@ -48,9 +78,17 @@ export default function ExploreScreen({
       );
       if (alive) {
         setCovers(result);
-        setCoverState(states);
+        setCoverState(prev => ({ ...prev, ...states }));
+        if (Object.keys(entries).length > 0) {
+          try {
+            save(KEYS.coversCache, { ...cached, ...entries });
+          } catch {
+            /* 缓存写失败不阻塞 */
+          }
+        }
       }
     })();
+
     return () => {
       alive = false;
     };

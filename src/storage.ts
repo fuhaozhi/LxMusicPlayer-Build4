@@ -45,4 +45,6 @@ export const KEYS = {
   playMode: 'lx.playMode',
   /** 歌单 / 榜单数据缓存（离线可看列表 + 秒开） */
   collectionCache: 'lx.cache.collections',
+  /** 音乐馆卡片封面缓存（打开秒显，后台刷新） */
+  coversCache: 'lx.cache.covers',
 } as const;
