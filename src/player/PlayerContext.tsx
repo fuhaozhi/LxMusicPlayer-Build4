@@ -80,6 +80,19 @@ const NowPlayingNative = NativeModules?.LxNowPlaying as
     }
   | undefined;
 
+const AudioCacheNative = NativeModules?.LxAudioCache as
+  | {
+      getCachedPath?: (key: string) => Promise<string | null>;
+      cacheSong?: (url: string, key: string) => Promise<boolean>;
+      getCacheSize?: () => Promise<number>;
+      clearCache?: () => Promise<number>;
+    }
+  | undefined;
+
+/** 歌曲缓存 key：平台 + 唯一 ID */
+const cacheKeyOf = (song: Song) =>
+  `${song.source}_${song.id || song.hash || song.songmid || song.name}`;
+
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const library = useLibrary();
   const [state, setState] = useState<PlayerState>({
@@ -317,8 +330,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     throw new Error('音源暂不可用，无法播放这首歌');
   };
 
-  /** 直接以已知 URL 播放并进入就绪态 */
-  const applySong = (index: number, queueList: Song[], api: LxMusicApi | null, url: string) => {
+  /** 直接以已知 URL 播放并进入就绪态（netUrl 为原始网络地址，用于后台缓存） */
+  const applySong = (index: number, queueList: Song[], api: LxMusicApi | null, url: string, netUrl: string | null = null) => {
     const song = queueList[index];
     if (!song) return;
     const p = pendingSeekRef.current;
@@ -343,6 +356,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     library.addRecent(song);
     persistPlay(song, 0);
     bgKeepRef.current = false;
+    // 后台缓存已播放的歌曲（不阻塞播放；已缓存自动跳过）
+    if (netUrl && /^https?:\/\//.test(netUrl)) {
+      const ck = cacheKeyOf(song);
+      AudioCacheNative?.cacheSong?.(netUrl, ck).catch(() => {});
+    }
     void prefetchNext(index, queueList, api);
   };
 
@@ -405,7 +423,25 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       pendingSeekRef.current = null;
       return;
     }
-    applySong(index, queueList, api, url);
+
+    // 优先播放本地缓存（离线可听）；无缓存用网络地址，并交由 applySong 后台下载缓存
+    let playUrl = url;
+    let netUrl: string | null = null;
+    if (/^https?:\/\//.test(url)) {
+      const ck = cacheKeyOf(song);
+      try {
+        const getPath = AudioCacheNative?.getCachedPath;
+        const cached = getPath ? await getPath(ck) : null;
+        if (cached) {
+          playUrl = 'file://' + cached;
+        } else {
+          netUrl = url;
+        }
+      } catch {
+        netUrl = url;
+      }
+    }
+    applySong(index, queueList, api, playUrl, netUrl);
   };
 
   const play: PlayerContextValue['play'] = async (song, api, queueList = [song]) => {
@@ -436,7 +472,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const pf = prefetchRef.current;
     if (pf && pf.songKey === songKeyOf(target)) {
       prefetchRef.current = null;
-      applySong(ni, list, apiRef.current, pf.url);
+      applySong(ni, list, apiRef.current, pf.url, pf.url);
       return;
     }
     void playIndex(ni, list, apiRef.current);

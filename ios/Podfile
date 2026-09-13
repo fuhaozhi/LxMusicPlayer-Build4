@@ -26,6 +26,9 @@ target 'LxMusicPlayer' do
   # 本地原生模块：锁屏「正在播放」卡片 + 远程控制
   pod 'LxNowPlaying', :path => './LxNowPlaying'
 
+  # 本地原生模块：播放过的歌曲离线缓存
+  pod 'LxAudioCache', :path => './LxAudioCache'
+
   post_install do |installer|
     react_native_post_install(
       installer,

@@ -4,6 +4,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  NativeModules,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +15,10 @@ import {
 import { AVAILABLE_SOURCES, isValidSourceUrl } from '../sourceManager';
 import type { SourceManager } from '../sourceManager';
 import { KEYS, load, remove } from '../storage';
+
+const AudioCacheNative = NativeModules?.LxAudioCache as
+  | { getCacheSize?: () => Promise<number>; clearCache?: () => Promise<number> }
+  | undefined;
 
 export default function SettingsScreen({
   manager,
@@ -26,6 +31,7 @@ export default function SettingsScreen({
   const [customUrl, setCustomUrl] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
   const [cacheInfo, setCacheInfo] = useState('读取中…');
+  const [audioCacheSize, setAudioCacheSize] = useState(0);
   const [cacheCleared, setCacheCleared] = useState(false);
 
   const refreshCacheInfo = useCallback(() => {
@@ -34,9 +40,15 @@ export default function SettingsScreen({
       const v = load<Record<string, unknown>>(KEYS.coversCache, {});
       const count = Object.keys(c).length;
       const kb = (JSON.stringify(c).length + JSON.stringify(v).length) / 1024;
-      setCacheInfo(count > 0 ? `已缓存 ${count} 个歌单 · 约 ${kb.toFixed(0)} KB` : '暂无缓存');
+      setCacheInfo(count > 0 ? `歌单 ${count} 个 · ${kb.toFixed(0)} KB` : '歌单暂无缓存');
     } catch {
-      setCacheInfo('暂无缓存');
+      setCacheInfo('歌单暂无缓存');
+    }
+    // 音频缓存大小（原生模块）
+    if (AudioCacheNative?.getCacheSize) {
+      AudioCacheNative.getCacheSize()
+        .then((n: number) => setAudioCacheSize(Number(n) || 0))
+        .catch(() => {});
     }
   }, []);
 
@@ -47,6 +59,7 @@ export default function SettingsScreen({
   const doClearCache = () => {
     remove(KEYS.collectionCache);
     remove(KEYS.coversCache);
+    if (AudioCacheNative?.clearCache) AudioCacheNative.clearCache().catch(() => {});
     refreshCacheInfo();
     setCacheCleared(true);
     setTimeout(() => setCacheCleared(false), 2000);
@@ -208,8 +221,12 @@ export default function SettingsScreen({
         <Text style={styles.sectionTitle}>缓存管理</Text>
         <View style={styles.cacheBox}>
           <View style={styles.cacheMain}>
-            <Text style={styles.cacheLabel}>歌单与封面缓存</Text>
-            <Text style={styles.cacheDesc}>{cacheCleared ? '已清理 ✓' : cacheInfo}</Text>
+            <Text style={styles.cacheLabel}>歌曲与歌单缓存</Text>
+            <Text style={styles.cacheDesc}>
+              {cacheCleared
+                ? '已清理 ✓'
+                : `${cacheInfo}${audioCacheSize > 0 ? ` · 歌曲 ${(audioCacheSize / 1024 / 1024).toFixed(1)} MB` : ''}`}
+            </Text>
           </View>
           <Pressable style={styles.clearCacheBtn} onPress={doClearCache}>
             <Text style={styles.clearCacheText}>清理缓存</Text>
