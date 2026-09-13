@@ -1,4 +1,4 @@
-#import "LxNowPlaying.h"
+﻿#import "LxNowPlaying.h"
 #import <MediaPlayer/MediaPlayer.h>
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
@@ -94,11 +94,12 @@ RCT_EXPORT_METHOD(keepSessionActive) {
     lastRate = 0;
   }
   if (lastRate > 0) lastElapsed += 1.0;
-  // 播放中每 30 秒保活一次：后台切歌/锁屏进度的持续不依赖 JS onProgress
+  // 保活节奏：临近结尾（15 秒内）每 2 秒保活一次，平时每 8 秒一次：后台切歌/锁屏进度的持续不依赖 JS onProgress
   // （iOS 后台时 onProgress 会停发，JS 的 keepSessionActive 调用会断链）
+  BOOL nearEnd = (lastDuration > 0 && lastElapsed >= lastDuration - 15);
   static NSInteger keepCount = 0;
   keepCount++;
-  if (lastRate > 0 && keepCount % 30 == 0) {
+  if (lastRate > 0 && keepCount % (nearEnd ? 2 : 8) == 0) {
     [self keepSessionActive];
   }
   NSMutableDictionary *m =

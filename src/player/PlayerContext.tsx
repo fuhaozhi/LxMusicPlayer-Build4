@@ -469,6 +469,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
     const target = list[ni];
     if (!target) return;
+    // 切歌瞬间同步清掉原生旧歌进度基准：后台/锁屏时 JS effect 可能不跑（React 渲染被暂停），
+    // 必须在这里直接推一次，否则锁屏会沿用上一首的时长，进度推到旧时长处就停住（"卡在上一首时长"）。
+    if (NowPlayingNative?.setNowPlaying) {
+      NowPlayingNative.setNowPlaying({
+        title: target.name,
+        artist: target.singer,
+        album: target.album ?? '',
+        // 新歌真实时长还没 onLoad，先用元数据 interval 兜底（避免 0 导致锁屏进度不动）
+        duration: Number(target.interval) > 0 ? Number(target.interval) : 0,
+        currentTime: 0,
+        rate: 0,
+      });
+    }
     const pf = prefetchRef.current;
     if (pf && pf.songKey === songKeyOf(target)) {
       prefetchRef.current = null;
@@ -544,6 +557,21 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
               }
             })
             .catch(() => {});
+          // 校准 duration：后台/锁屏切歌后 onLoad 可能没触发，duration 还停在上一首或 0，
+          // 导致软件内进度条按旧时长显示、锁屏推进到旧时长就停。回前台必须补一次。
+          if (typeof v.getDuration === 'function') {
+            v.getDuration()
+              .then((d: number) => {
+                const nd = Number(d) || 0;
+                if (nd > 0) {
+                  setState(prev => {
+                    if (Math.abs(prev.duration - nd) < 1) return prev;
+                    return { ...prev, duration: nd };
+                  });
+                }
+              })
+              .catch(() => {});
+          }
         } catch {
           /* 播放器未就绪时忽略 */
         }
@@ -580,7 +608,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       title: state.song.name,
       artist: state.song.singer,
       album: state.song.album ?? '',
-      duration: state.duration || 0,
+      // 视频真实时长未就绪（后台切歌后 onLoad 可能没跑）时，用歌曲元数据 interval 兜底，
+      // 避免锁屏时长停留在上一首导致进度卡死
+      duration: state.duration || Number(state.song.interval) || 0,
       currentTime: state.currentTime || 0,
       rate: state.paused ? 0 : 1,
     };
