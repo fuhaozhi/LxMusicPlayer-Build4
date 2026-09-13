@@ -28,6 +28,13 @@ jobs:
             || npm install --no-audit --no-fund \
             || npm install --no-audit --no-fund --registry=https://registry.npmmirror.com
 
+
+
+      - name: Sync app version from package.json
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          sed -i '' "s/MARKETING_VERSION = [0-9.]*;/MARKETING_VERSION = $VERSION;/g" ios/LxMusicPlayer.xcodeproj/project.pbxproj
+          echo "Synced MARKETING_VERSION -> $VERSION"
       - name: Setup Ruby 3.3
         uses: ruby/setup-ruby@v1
         with:

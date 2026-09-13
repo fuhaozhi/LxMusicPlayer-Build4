@@ -479,7 +479,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         // 新歌真实时长还没 onLoad，先用元数据 interval 兜底（避免 0 导致锁屏进度不动）
         duration: Number(target.interval) > 0 ? Number(target.interval) : 0,
         currentTime: 0,
-        rate: 0,
+        // rate 必须为 1：新歌在播放器里已经开始播，原生侧按此推进锁屏进度；
+        // 传 0 会让锁屏进度停在 0（后台时 onLoad 不来，进度就一直卡住不动）
+        rate: 1,
       });
     }
     const pf = prefetchRef.current;
