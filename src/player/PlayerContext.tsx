@@ -614,7 +614,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       // 避免锁屏时长停留在上一首导致进度卡死
       duration: state.duration || Number(state.song.interval) || 0,
       currentTime: state.currentTime || 0,
-      rate: state.paused ? 0 : 1,
+      // 新歌真实时长未就绪（后台切歌后 onLoad 没跑、duration=0）时强制 rate:1，
+      // 避免切歌缓冲中 paused=true 把锁屏进度打成 0，覆盖掉 next() 里刚推的 rate:1
+      rate: state.duration > 0 ? (state.paused ? 0 : 1) : 1,
     };
     if (state.song.pic) {
       NowPlayingNative.setNowPlaying({ ...info, artworkUrl: state.song.pic });

@@ -1,4 +1,4 @@
-﻿#import "LxNowPlaying.h"
+#import "LxNowPlaying.h"
 #import <MediaPlayer/MediaPlayer.h>
 #import <AVFoundation/AVFoundation.h>
 #import <UIKit/UIKit.h>
@@ -14,6 +14,7 @@
   double lastRate;
   double lastDuration;
   BOOL hasProgress;
+  NSInteger endGraceCount;
   UIBackgroundTaskIdentifier bgTask;
 }
 
@@ -91,7 +92,16 @@ RCT_EXPORT_METHOD(keepSessionActive) {
   if (!hasProgress) return;
   // 进度已到/越过终点（切歌空窗期新歌还没 onLoad）：停止推进，避免锁屏卡在旧歌进度
   if (lastDuration > 0 && lastElapsed >= lastDuration - 0.3) {
-    lastRate = 0;
+    // 切歌宽限：最多再推 6 秒，等新歌 setNowPlaying 重置（后台切歌取链有 1~3s 空窗，
+    // 立即归 0 会让锁屏进度在空窗期秒停，看起来卡死）
+    if (++endGraceCount <= 6) {
+      // 保持 lastRate 继续推进（可轻微超过 duration，iOS 锁屏显示 100%）
+    } else {
+      lastRate = 0;
+      endGraceCount = 0;
+    }
+  } else {
+    endGraceCount = 0;
   }
   if (lastRate > 0) lastElapsed += 1.0;
   // 保活节奏：临近结尾（15 秒内）每 2 秒保活一次，平时每 8 秒一次：后台切歌/锁屏进度的持续不依赖 JS onProgress
@@ -99,7 +109,7 @@ RCT_EXPORT_METHOD(keepSessionActive) {
   BOOL nearEnd = (lastDuration > 0 && lastElapsed >= lastDuration - 15);
   static NSInteger keepCount = 0;
   keepCount++;
-  if (lastRate > 0 && keepCount % (nearEnd ? 2 : 8) == 0) {
+  if (lastRate > 0 && keepCount % (nearEnd ? 2 : 4) == 0) {
     [self keepSessionActive];
   }
   NSMutableDictionary *m =
