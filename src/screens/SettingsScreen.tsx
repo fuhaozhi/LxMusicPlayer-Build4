@@ -2,6 +2,10 @@
  * 设置 —— 音源管理：查看已添加音源、加载切换、删除、添加（自定义 URL 或内置推荐）。
  */
 import React, { useCallback, useEffect, useState } from 'react';
+// 构建版本号直接读 package.json（与每次构建的 v 版本严格一致）
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const PKG_VERSION: string = require('../../package.json').version;
+
 import {
   ActivityIndicator,
   NativeModules,
@@ -33,14 +37,7 @@ export default function SettingsScreen({
   const [cacheInfo, setCacheInfo] = useState('读取中…');
   const [audioCacheSize, setAudioCacheSize] = useState(0);
   const [cacheCleared, setCacheCleared] = useState(false);
-  const [appVersion, setAppVersion] = useState('');
 
-  useEffect(() => {
-    const n = NativeModules?.LxNowPlaying as
-      | { getVersion?: (cb: (v: string[]) => void) => void }
-      | undefined;
-    n?.getVersion?.(vs => setAppVersion(String(vs?.[0] || '')));
-  }, []);
 
   const refreshCacheInfo = useCallback(() => {
     try {
@@ -242,7 +239,7 @@ export default function SettingsScreen({
         </View>
 
         <Text style={styles.about}>LxMusicPlayer · 自签 iOS 音乐播放器</Text>
-{appVersion ? <Text style={styles.about}>版本 v{appVersion}</Text> : null}
+<Text style={styles.about}>版本 v{PKG_VERSION}</Text>
       </ScrollView>
     </View>
   );
