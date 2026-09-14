@@ -239,7 +239,7 @@ export default function NowPlayingScreen({
         <Text style={styles.singer} numberOfLines={1}>
           {song.singer}
         </Text>
-        {song.album ? (
+        {song.album && !/封面|设计：/.test(song.album) ? (
           <Text style={styles.album} numberOfLines={1}>
             {song.album}
           </Text>

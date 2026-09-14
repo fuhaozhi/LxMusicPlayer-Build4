@@ -392,6 +392,18 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     indexRef.current = index;
     queueRef.current = queueList;
     setQueue(queueList);
+    // 切歌入口统一推送锁屏：立即把新歌信息推到锁屏（后台 JS 冻结时 effect 可能不跑，
+    // 必须在切歌这一刻直接推，避免锁屏停留在上一首/上一进度）
+    if (NowPlayingNative?.setNowPlaying) {
+      NowPlayingNative.setNowPlaying({
+        title: song.name,
+        artist: song.singer,
+        album: song.album ?? '',
+        duration: Number(song.interval) > 0 ? Number(song.interval) : 0,
+        currentTime: 0,
+        rate: 1,
+      });
+    }
     lastProgressRef.current = 0;
     setState(prev => ({
       ...prev,

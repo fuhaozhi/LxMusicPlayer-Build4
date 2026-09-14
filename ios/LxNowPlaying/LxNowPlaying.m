@@ -60,6 +60,7 @@ RCT_EXPORT_METHOD(keepSessionActive) {
                                     withOptions:0
                                           error:&err];
   [[AVAudioSession sharedInstance] setActive:YES error:&err];
+  [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
   // 结束后台任务再重新申请，避免额度被上一次切歌耗尽
   if (bgTask != UIBackgroundTaskInvalid) {
     [[UIApplication sharedApplication] endBackgroundTask:bgTask];
@@ -134,6 +135,7 @@ RCT_EXPORT_METHOD(keepSessionActive) {
                                     withOptions:0
                                           error:&error];
   [[AVAudioSession sharedInstance] setActive:YES error:&error];
+  [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
   [self setupInterruptionObserver];
 }
 
@@ -157,6 +159,7 @@ RCT_EXPORT_METHOD(keepSessionActive) {
     if (opt && opt.unsignedIntegerValue == AVAudioSessionInterruptionOptionShouldResume) {
       NSError *err = nil;
       [[AVAudioSession sharedInstance] setActive:YES error:&err];
+  [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
       [self emitCommand:@{@"type" : @"play"}];
     }
   }
@@ -200,7 +203,12 @@ RCT_EXPORT_METHOD(setNowPlaying:(NSDictionary *)info) {
     [self stopProgressTimer];
   }
 
-  [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = now;
+  // iOS 14+ 用 setNowPlayingInfo: 更可靠（赋值属性在部分系统上不触发锁屏刷新）
+  if (@available(iOS 14.0, *)) {
+    [[MPNowPlayingInfoCenter defaultCenter] setNowPlayingInfo:now];
+  } else {
+    [MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo = now;
+  }
 
   id artworkUrl = info[@"artworkUrl"];
   if ([artworkUrl isKindOfClass:[NSString class]] && [artworkUrl length] > 0) {
