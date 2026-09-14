@@ -242,7 +242,7 @@ export default function SettingsScreen({
         </View>
 
         <Text style={styles.about}>LxMusicPlayer · 自签 iOS 音乐播放器</Text>
-{appVersion ? <Text style={styles.about}>版本 {appVersion}</Text> : null}
+{appVersion ? <Text style={styles.about}>版本 v{appVersion}</Text> : null}
       </ScrollView>
     </View>
   );

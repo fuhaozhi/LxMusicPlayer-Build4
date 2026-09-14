@@ -501,11 +501,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   };
 
   const seekTo: PlayerContextValue['seekTo'] = t => {
-    const target = Math.max(0, Number(t) || 0);
+    let target = Math.max(0, Number(t) || 0);
+    // 有限性保护：NaN/Infinity 一律归 0，避免传给播放器崩溃
+    if (!Number.isFinite(target)) target = 0;
     seekAtRef.current = Date.now();
     setState(prev => ({ ...prev, currentTime: target }));
     try {
-      videoRef.current?.seek(target);
+      const v = videoRef.current;
+      if (v && state.url) v.seek(target);
     } catch {
       /* 个别引擎不支持 seek 时忽略 */
     }
@@ -650,31 +653,38 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           prev();
           break;
         case 'tick': {
-          // 后台/锁屏唤醒校准：原生每 3 秒发一次（RN 后台 JS 冻结时 onProgress/onLoad 停发），
-          // 读取播放器真实进度/时长修正锁屏与软件内进度条，切歌后不卡在上一首结尾
+          // 后台/锁屏唤醒校准：原生仅在后台每 5 秒发一次（RN 后台 JS 冻结时 onProgress/onLoad 停发），
+          // 读取播放器真实进度/时长修正锁屏，切歌后不卡在上一首结尾。
+          // 全程纯 Promise + 捕获，任何异常都不外抛，避免 Release 下未捕获异常导致闪退
           const tv = videoRef.current;
           if (!tv) break;
-          tv.getCurrentTime?.()
-            .then((tt: number) => {
-              const ntt = Number(tt) || 0;
-              if (ntt <= 0) return;
-              lastProgressRef.current = ntt;
-              setState(prev =>
-                Math.abs(prev.currentTime - ntt) < 1 ? prev : { ...prev, currentTime: ntt },
-              );
-              NowPlayingNative?.updateProgress?.(ntt, 1);
-            })
-            .catch(() => {});
-          if (typeof tv.getDuration === 'function') {
-            tv.getDuration()
-              .then((dd: number) => {
-                const ndd = Number(dd) || 0;
-                if (ndd > 0)
-                  setState(prev =>
-                    Math.abs(prev.duration - ndd) < 1 ? prev : { ...prev, duration: ndd },
-                  );
-              })
-              .catch(() => {});
+          if (Date.now() - seekAtRef.current < 3000) break;
+          try {
+            if (typeof tv.getDuration === 'function') {
+              Promise.resolve(tv.getDuration())
+                .then((dd0: number) => {
+                  const d0 = Number(dd0) || 0;
+                  if (d0 > 0)
+                    setState(prev => (Math.abs(prev.duration - d0) < 1 ? prev : { ...prev, duration: d0 }));
+                  if (d0 <= 0) return;
+                  if (typeof tv.getCurrentTime === 'function') {
+                    Promise.resolve(tv.getCurrentTime())
+                      .then((tt: number) => {
+                        const ntt = Number(tt) || 0;
+                        if (ntt <= 0) return;
+                        lastProgressRef.current = ntt;
+                        setState(prev =>
+                          Math.abs(prev.currentTime - ntt) < 1 ? prev : { ...prev, currentTime: ntt },
+                        );
+                        NowPlayingNative?.updateProgress?.(ntt, 1);
+                      })
+                      .catch(() => {});
+                  }
+                })
+                .catch(() => {});
+            }
+          } catch {
+            /* 校准失败静默忽略 */
           }
           break;
         }
