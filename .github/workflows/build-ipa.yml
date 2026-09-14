@@ -7,6 +7,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   build-ipa:
     runs-on: macos-latest
@@ -76,6 +79,18 @@ jobs:
           name: LxMusicPlayer-unsigned-ipa
           path: build/ipa/LxMusicPlayer-unsigned.ipa
           if-no-files-found: error
+      - name: Create GitHub Release (for in-app update check)
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "${{ github.workspace }}"
+          VERSION="v$(node -p "require('./package.json').version")"
+          gh release create "$VERSION" \
+            --repo "${{ github.repository }}" \
+            --title "$VERSION" \
+            --notes "LxMusicPlayer 自动构建 $VERSION — 未签名 IPA，下载后用小白签 PRO 签名安装。App 内设置页可检查更新。" \
+            build/ipa/LxMusicPlayer-unsigned.ipa || echo "release-exists-skipped"
 
       - name: Upload debug logs on failure
         if: failure()

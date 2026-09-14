@@ -8,6 +8,8 @@ const PKG_VERSION: string = require('../../package.json').version;
 
 import {
   ActivityIndicator,
+  Alert,
+  Linking,
   NativeModules,
   Pressable,
   ScrollView,
@@ -39,6 +41,38 @@ export default function SettingsScreen({
   const [cacheCleared, setCacheCleared] = useState(false);
 
 
+  const checkUpdate = useCallback(async (silent: boolean) => {
+    try {
+      const res = await fetch('https://api.github.com/repos/fuhaozhi/LxMusicPlayer-Build4/releases/latest');
+      if (!res.ok) {
+        if (!silent) Alert.alert('检查更新', '暂时无法连接更新服务，请稍后再试');
+        return;
+      }
+      const rel = await res.json();
+      const latest = String(rel?.tag_name || '').replace(/^v/i, '');
+      const cur = String(PKG_VERSION).replace(/^v/i, '');
+      if (latest && latest !== cur) {
+        Alert.alert(
+          '发现新版本',
+          `当前版本 v${cur}\n最新版本 v${latest}\n\n点击“去更新”打开下载页面，用小白签签名覆盖安装（数据保留）`,
+          [
+            { text: '取消', style: 'cancel' },
+            {
+              text: '去更新',
+              onPress: () => {
+                Linking.openURL(String(rel?.html_url || 'https://github.com/fuhaozhi/LxMusicPlayer-Build4/releases/latest')).catch(() => {});
+              },
+            },
+          ],
+        );
+      } else if (!silent) {
+        Alert.alert('检查更新', '已是最新版本');
+      }
+    } catch {
+      if (!silent) Alert.alert('检查更新', '检查失败，请稍后再试');
+    }
+  }, []);
+
   const refreshCacheInfo = useCallback(() => {
     try {
       const c = load<Record<string, unknown>>(KEYS.collectionCache, {});
@@ -60,6 +94,10 @@ export default function SettingsScreen({
   useEffect(() => {
     refreshCacheInfo();
   }, [refreshCacheInfo]);
+
+  useEffect(() => {
+    void checkUpdate(true);
+  }, [checkUpdate]);
 
   const doClearCache = () => {
     remove(KEYS.collectionCache);
@@ -235,6 +273,18 @@ export default function SettingsScreen({
           </View>
           <Pressable style={styles.clearCacheBtn} onPress={doClearCache}>
             <Text style={styles.clearCacheText}>清理缓存</Text>
+          </Pressable>
+        </View>
+
+        {/* 检查更新 */}
+        <Text style={styles.sectionTitle}>更新</Text>
+        <View style={styles.cacheBox}>
+          <View style={styles.cacheMain}>
+            <Text style={styles.cacheLabel}>检查新版本</Text>
+            <Text style={styles.cacheDesc}>当前 v{PKG_VERSION}，自动检测 GitHub 最新构建</Text>
+          </View>
+          <Pressable style={styles.clearCacheBtn} onPress={() => checkUpdate(false)}>
+            <Text style={styles.clearCacheText}>检查更新</Text>
           </Pressable>
         </View>
 

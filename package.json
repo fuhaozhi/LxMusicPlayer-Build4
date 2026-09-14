@@ -1,6 +1,6 @@
 {
   "name": "LxMusicPlayer",
-  "version": "1.12.5",
+  "version": "1.12.6",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
