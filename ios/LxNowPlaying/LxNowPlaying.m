@@ -188,7 +188,11 @@ RCT_EXPORT_METHOD(setNowPlaying:(NSDictionary *)info) {
     hasProgress = YES;
     [self startProgressTimer];
   } else {
-    // 切歌/新歌未就绪：清掉推进状态，锁屏立即停住，不再沿用上一首的进度
+    // 切歌/新歌未就绪：清掉推进状态，同时显式清空锁屏进度字段。
+    // 若不清空，iOS 锁屏会保留上一首的进度显示（自动切歌后进度条停在上一首结尾）
+    now[MPMediaItemPropertyPlaybackDuration] = @0;
+    now[MPNowPlayingInfoPropertyElapsedPlaybackTime] = @0;
+    now[MPNowPlayingInfoPropertyPlaybackRate] = @0;
     lastElapsed = 0;
     lastRate = 0;
     lastDuration = 0;
