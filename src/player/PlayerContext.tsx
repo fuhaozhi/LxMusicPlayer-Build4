@@ -649,9 +649,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         case 'prev':
           prev();
           break;
-        case 'seek':
-          seekTo(Number(e.position) || 0);
+        case 'tick': {
+          // 后台/锁屏唤醒校准：原生每 3 秒发一次（RN 后台 JS 冻结时 onProgress/onLoad 停发），
+          // 读取播放器真实进度/时长修正锁屏与软件内进度条，切歌后不卡在上一首结尾
+          const tv = videoRef.current;
+          if (!tv) break;
+          tv.getCurrentTime?.()
+            .then((tt: number) => {
+              const ntt = Number(tt) || 0;
+              if (ntt <= 0) return;
+              lastProgressRef.current = ntt;
+              setState(prev =>
+                Math.abs(prev.currentTime - ntt) < 1 ? prev : { ...prev, currentTime: ntt },
+              );
+              NowPlayingNative?.updateProgress?.(ntt, 1);
+            })
+            .catch(() => {});
+          if (typeof tv.getDuration === 'function') {
+            tv.getDuration()
+              .then((dd: number) => {
+                const ndd = Number(dd) || 0;
+                if (ndd > 0)
+                  setState(prev =>
+                    Math.abs(prev.duration - ndd) < 1 ? prev : { ...prev, duration: ndd },
+                  );
+              })
+              .catch(() => {});
+          }
           break;
+        }
         default:
           break;
       }

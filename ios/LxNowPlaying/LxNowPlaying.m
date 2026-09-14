@@ -112,6 +112,11 @@ RCT_EXPORT_METHOD(keepSessionActive) {
   if (lastRate > 0 && keepCount % (nearEnd ? 2 : 4) == 0) {
     [self keepSessionActive];
   }
+  // 每 3 秒唤醒一次 JS 校准真实进度/时长（RN 后台 JS 冻结时 onProgress/onLoad 停发，
+  // 原生主动 emit tick，JS 收到后 getCurrentTime/getDuration 校准锁屏，保证切歌后进度不卡死）
+  if (lastRate > 0 && keepCount % 3 == 0) {
+    [self emitCommand:@{@"type" : @"tick"}];
+  }
   NSMutableDictionary *m =
       [[MPNowPlayingInfoCenter defaultCenter].nowPlayingInfo mutableCopy];
   if (!m) m = [NSMutableDictionary dictionary];
@@ -217,6 +222,11 @@ RCT_EXPORT_METHOD(setNowPlaying:(NSDictionary *)info) {
              });
            }];
   }
+}
+
+RCT_EXPORT_METHOD(getVersion:(RCTResponseSenderBlock)callback) {
+  NSString *v = [[NSBundle mainBundle] infoDictionary][@"CFBundleShortVersionString"];
+  if (callback) callback(@[v ?: @""]);
 }
 
 RCT_EXPORT_METHOD(clearNowPlaying) {

@@ -33,6 +33,14 @@ export default function SettingsScreen({
   const [cacheInfo, setCacheInfo] = useState('读取中…');
   const [audioCacheSize, setAudioCacheSize] = useState(0);
   const [cacheCleared, setCacheCleared] = useState(false);
+  const [appVersion, setAppVersion] = useState('');
+
+  useEffect(() => {
+    const n = NativeModules?.LxNowPlaying as
+      | { getVersion?: (cb: (v: string[]) => void) => void }
+      | undefined;
+    n?.getVersion?.(vs => setAppVersion(String(vs?.[0] || '')));
+  }, []);
 
   const refreshCacheInfo = useCallback(() => {
     try {
@@ -234,6 +242,7 @@ export default function SettingsScreen({
         </View>
 
         <Text style={styles.about}>LxMusicPlayer · 自签 iOS 音乐播放器</Text>
+{appVersion ? <Text style={styles.about}>版本 {appVersion}</Text> : null}
       </ScrollView>
     </View>
   );
