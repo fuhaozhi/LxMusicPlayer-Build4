@@ -651,6 +651,31 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       switch (e?.type) {
         case 'play':
           setState(prev => ({ ...prev, paused: false }));
+          // 中断恢复（导航语音/来电等抢占后 iOS 通知恢复）：播放器可能真的暂停了，
+          // 必须调用 play() 才能真正恢复；若中断发生在歌尾，play() 无效且不再触发 onEnd，
+          // 需读取真实进度判断是否已到结尾，是则直接切下一首
+          {
+            const pv = videoRef.current;
+            if (pv && typeof pv.play === 'function') {
+              try {
+                pv.play();
+              } catch {
+                /* 播放器未就绪时忽略 */
+              }
+            }
+            if (pv && typeof pv.getCurrentTime === 'function' && typeof pv.getDuration === 'function') {
+              Promise.resolve(pv.getCurrentTime())
+                .then((ct: number) => {
+                  const nct = Number(ct) || 0;
+                  if (nct <= 0) return;
+                  return Promise.resolve(pv.getDuration()).then((dd: number) => {
+                    const ndd = Number(dd) || 0;
+                    if (ndd > 0 && nct >= ndd - 1.5) next(false);
+                  });
+                })
+                .catch(() => {});
+            }
+          }
           break;
         case 'pause':
           setState(prev => ({ ...prev, paused: true }));
