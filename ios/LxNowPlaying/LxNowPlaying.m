@@ -154,14 +154,16 @@ RCT_EXPORT_METHOD(keepSessionActive) {
   NSDictionary *info = note.userInfo;
   NSNumber *type = info[AVAudioSessionInterruptionTypeKey];
   if (!type) return;
+  // iOS 15+ 中断结束通知经常不带 ShouldResume 标志，不能依赖它判断是否恢复；
+  // 只要中断结束就重新激活会话并通知 JS 恢复（导航语音播报等场景必须自动续播）。
   if (type.unsignedIntegerValue == AVAudioSessionInterruptionTypeEnded) {
-    NSNumber *opt = info[AVAudioSessionInterruptionOptionKey];
-    if (opt && opt.unsignedIntegerValue == AVAudioSessionInterruptionOptionShouldResume) {
-      NSError *err = nil;
-      [[AVAudioSession sharedInstance] setActive:YES error:&err];
-  [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
-      [self emitCommand:@{@"type" : @"play"}];
-    }
+    NSError *err = nil;
+    [[AVAudioSession sharedInstance] setActive:YES error:&err];
+    [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
+    // 原生自己维护的进度（tickProgress 每秒 +1）判断：若中断结束时歌已播到尾，
+    // play() 无法再触发 onEnd，直接发 ended 让 JS 切下一首；否则发 play 恢复续播
+    BOOL reachedEnd = lastDuration > 0 && lastElapsed >= lastDuration - 1.5;
+    [self emitCommand:@{@"type" : (reachedEnd ? @"ended" : @"play")}];
   }
 }
 

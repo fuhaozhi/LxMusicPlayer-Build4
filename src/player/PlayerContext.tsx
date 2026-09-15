@@ -686,6 +686,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         case 'next':
           next(true);
           break;
+        case 'ended':
+          // 原生播完检测（导航中断/后台 onEnd 丢失时的兜底）：直接切下一首
+          next(false);
+          break;
         case 'prev':
           prev();
           break;
