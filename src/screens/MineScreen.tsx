@@ -1,10 +1,13 @@
 /**
  * 我的 —— 网易云风格：红色渐变头部 + 听歌统计 + 最近播放 / 自建歌单 / 收藏歌单 / 设置
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -74,6 +77,20 @@ export default function MineScreen({
     setNewName('');
     setCreating(false);
   };
+
+
+  // 键盘避让：弹窗输入时被键盘遮挡则整体上移
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    const s1 = Keyboard.addListener('keyboardWillShow', (e: any) =>
+      setKbHeight(e?.endCoordinates?.height ?? 280),
+    );
+    const s2 = Keyboard.addListener('keyboardWillHide', () => setKbHeight(0));
+    return () => {
+      s1.remove();
+      s2.remove();
+    };
+  }, []);
 
   // —— 导入歌单 ——
   const [importOpen, setImportOpen] = useState(false);
@@ -284,8 +301,9 @@ export default function MineScreen({
 
       {/* 新建歌单弹窗 */}
       <Modal visible={creating} transparent animationType="fade" onRequestClose={() => setCreating(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.maskWrap}>
         <Pressable style={styles.mask} onPress={() => setCreating(false)}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
+          <Pressable style={[styles.sheet, { marginBottom: kbHeight }]} onPress={() => {}}>
             <Text style={styles.sheetTitle}>新建歌单</Text>
             <TextInput
               style={styles.sheetInput}
@@ -303,12 +321,14 @@ export default function MineScreen({
             </Pressable>
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* 导入歌单弹窗 */}
       <Modal visible={importOpen} transparent animationType="fade" onRequestClose={closeImport}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.maskWrap}>
         <Pressable style={styles.mask} onPress={closeImport}>
-          <Pressable style={styles.sheet} onPress={() => {}}>
+          <Pressable style={[styles.sheet, { marginBottom: kbHeight }]} onPress={() => {}}>
             <Text style={styles.sheetTitle}>导入歌单</Text>
             {importResult ? (
               <>
@@ -370,6 +390,7 @@ export default function MineScreen({
             </Pressable>
           </Pressable>
         </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -515,6 +536,7 @@ const styles = StyleSheet.create({
   settingsIconText: { fontSize: 17, color: RED },
   settingsText: { flex: 1, fontSize: 15, color: '#1F2329', fontWeight: '500', paddingLeft: 12 },
   settingsGo: { fontSize: 22, color: '#C0C6CC' },
+  maskWrap: { flex: 1 },
   mask: { flex: 1, backgroundColor: 'rgba(20,24,28,0.4)', justifyContent: 'center', paddingHorizontal: 40 },
   sheet: {
     backgroundColor: '#FFFFFF',
