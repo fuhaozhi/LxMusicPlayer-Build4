@@ -19,6 +19,8 @@ interface LibraryContextValue {
   addRecent: (song: Song) => void;
   /** 新建歌单，返回创建的歌单 */
   createPlaylist: (name: string) => LocalPlaylist | null;
+  /** 导入歌单：直接以歌曲列表创建歌单（分享链接导入/文本导入用） */
+  importPlaylist: (name: string, songs: Song[]) => LocalPlaylist | null;
   deletePlaylist: (id: string) => void;
   addSongToPlaylist: (playlistId: string, song: Song) => void;
   removeSongFromPlaylist: (playlistId: string, songKey: string) => void;
@@ -91,6 +93,23 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       return pl;
     };
 
+    const importPlaylist = (name: string, songs: Song[]): LocalPlaylist | null => {
+      const trimmed = name.trim();
+      if (!trimmed && !songs.length) return null;
+      const pl: LocalPlaylist = {
+        id: `pl-${Date.now()}`,
+        name: (trimmed || '导入的歌单').slice(0, 20),
+        createdAt: Date.now(),
+        songs,
+      };
+      setPlaylists(prev => {
+        const next = [pl, ...prev];
+        save(KEYS.playlists, next);
+        return next;
+      });
+      return pl;
+    };
+
     const deletePlaylist = (id: string) => {
       setPlaylists(prev => {
         const next = prev.filter(p => p.id !== id);
@@ -144,6 +163,7 @@ export function LibraryProvider({ children }: { children: React.ReactNode }) {
       bumpSeconds,
       addRecent,
       createPlaylist,
+      importPlaylist,
       deletePlaylist,
       addSongToPlaylist,
       removeSongFromPlaylist,

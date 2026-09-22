@@ -3,6 +3,7 @@
  */
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
@@ -11,6 +12,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { parseShareInput, fetchWyPlaylist, fetchTxPlaylist, fetchKgPlaylist, parseTextSongs } from '../importPlaylist';
+import { searchNetease, BAD_VERSION } from '../searchSources';
 import { usePlayer } from '../player/PlayerContext';
 import { useLibrary } from '../library';
 import SongArt from '../components/SongArt';
@@ -59,7 +62,7 @@ export default function MineScreen({
   onOpenLocalPlaylist: (pl: LocalPlaylist) => void;
   onOpenReport: () => void;
 }) {
-  const { recents, playlists, favs, stats, createPlaylist } = useLibrary();
+  const { recents, playlists, favs, stats, createPlaylist, importPlaylist } = useLibrary();
   const { play } = usePlayer();
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -70,6 +73,87 @@ export default function MineScreen({
     createPlaylist(newName);
     setNewName('');
     setCreating(false);
+  };
+
+  // —— 导入歌单 ——
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importPlatform, setImportPlatform] = useState<'auto' | 'wy' | 'tx' | 'kg'>('auto');
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importResult, setImportResult] = useState<{ name: string; count: number; songs: Song[] } | null>(null);
+
+  const fetchByPlatform = async (pl: 'wy' | 'tx' | 'kg', id: string) =>
+    pl === 'wy' ? fetchWyPlaylist(id) : pl === 'tx' ? fetchTxPlaylist(id) : fetchKgPlaylist(id);
+
+  const doImport = async () => {
+    if (importBusy) return;
+    setImportBusy(true);
+    setImportError('');
+    try {
+      const parsed = parseShareInput(importText);
+      let result: { name: string; count: number; songs: Song[] };
+      if (parsed.kind === 'link' && parsed.platform && parsed.id) {
+        const r = await fetchByPlatform(parsed.platform, parsed.id);
+        result = { name: r.name, count: r.songs.length, songs: r.songs };
+      } else if (parsed.kind === 'link' && parsed.shortUrl) {
+        // 短链：跟随跳转拿最终地址再解析
+        const resp = await fetch(parsed.shortUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15' },
+        });
+        const re = parseShareInput(resp.url || '');
+        if (!re.platform || !re.id) throw new Error('短链无法识别歌单，请打开后复制完整链接');
+        const r = await fetchByPlatform(re.platform, re.id);
+        result = { name: r.name, count: r.songs.length, songs: r.songs };
+      } else if (parsed.kind === 'id') {
+        if (importPlatform === 'auto') throw new Error('检测到歌单 ID，请选择平台');
+        const r = await fetchByPlatform(importPlatform, parsed.id!);
+        result = { name: r.name, count: r.songs.length, songs: r.songs };
+      } else {
+        // 文本导入：多行「歌名 歌手」，按网易云匹配
+        const lines = parseTextSongs(importText);
+        if (!lines.length) throw new Error('没有可识别的歌曲，请检查输入');
+        const songs: Song[] = [];
+        let failed = 0;
+        for (const ln of lines.slice(0, 100)) {
+          try {
+            const kw = ln.singer ? `${ln.name} ${ln.singer}` : ln.name;
+            const res = await searchNetease(kw);
+            const hit = res.find(s => !BAD_VERSION.test(s.name));
+            if (hit) songs.push(hit);
+            else failed++;
+          } catch {
+            failed++;
+          }
+        }
+        if (!songs.length) throw new Error('未能匹配到任何歌曲（文本按网易云匹配）');
+        result = { name: `文本导入（成功 ${songs.length}/${lines.length}）`, count: songs.length, songs };
+      }
+      setImportResult(result);
+    } catch (e: any) {
+      setImportError(String(e?.message ?? e));
+    } finally {
+      setImportBusy(false);
+    }
+  };
+
+  const confirmSaveImport = () => {
+    if (!importResult) return;
+    importPlaylist(importResult.name, importResult.songs);
+    setImportOpen(false);
+    setImportResult(null);
+    setImportText('');
+    setImportPlatform('auto');
+    setImportError('');
+  };
+
+  const closeImport = () => {
+    if (importBusy) return;
+    setImportOpen(false);
+    setImportResult(null);
+    setImportText('');
+    setImportPlatform('auto');
+    setImportError('');
   };
 
   return (
@@ -134,6 +218,18 @@ export default function MineScreen({
           <Pressable style={[styles.hCard, styles.createCard]} onPress={() => setCreating(true)}>
             <Text style={styles.createPlus}>＋</Text>
             <Text style={styles.createText}>新建歌单</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.hCard, styles.createCard]}
+            onPress={() => {
+              setImportOpen(true);
+              setImportResult(null);
+              setImportText('');
+              setImportError('');
+            }}
+          >
+            <Text style={styles.createPlus}>⇣</Text>
+            <Text style={styles.createText}>导入歌单</Text>
           </Pressable>
           {playlists.map(pl => (
             <Pressable key={pl.id} style={styles.hCard} onPress={() => onOpenLocalPlaylist(pl)}>
@@ -203,6 +299,73 @@ export default function MineScreen({
               <Text style={styles.sheetBtnText}>创建</Text>
             </Pressable>
             <Pressable style={styles.sheetCancel} onPress={() => setCreating(false)}>
+              <Text style={styles.sheetCancelText}>取消</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* 导入歌单弹窗 */}
+      <Modal visible={importOpen} transparent animationType="fade" onRequestClose={closeImport}>
+        <Pressable style={styles.mask} onPress={closeImport}>
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <Text style={styles.sheetTitle}>导入歌单</Text>
+            {importResult ? (
+              <>
+                <Text style={styles.importInfo}>
+                  已获取歌单「{importResult.name}」，共 {importResult.count} 首
+                </Text>
+                <Pressable style={styles.sheetBtn} onPress={confirmSaveImport}>
+                  <Text style={styles.sheetBtnText}>保存到我的歌单</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={styles.importHint}>
+                  支持网易云 / QQ音乐 / 酷狗的歌单分享链接或 ID；也可粘贴多行「歌名 歌手」文本自动匹配。
+                </Text>
+                <TextInput
+                  style={[styles.sheetInput, styles.importInput]}
+                  value={importText}
+                  onChangeText={setImportText}
+                  placeholder="粘贴歌单链接 / ID，或输入多行歌曲文本"
+                  placeholderTextColor="#B4B9C0"
+                  multiline
+                />
+                <View style={styles.importChips}>
+                  {(
+                    [
+                      ['auto', '自动识别'],
+                      ['wy', '网易云'],
+                      ['tx', 'QQ音乐'],
+                      ['kg', '酷狗'],
+                    ] as const
+                  ).map(([v, label]) => (
+                    <Pressable
+                      key={v}
+                      style={[styles.importChip, importPlatform === v && styles.importChipOn]}
+                      onPress={() => setImportPlatform(v)}
+                    >
+                      <Text style={[styles.importChipText, importPlatform === v && styles.importChipTextOn]}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {importError ? <Text style={styles.importError}>{importError}</Text> : null}
+                {importBusy ? (
+                  <View style={styles.importBusy}>
+                    <ActivityIndicator color={RED} />
+                    <Text style={styles.importBusyText}>导入中…</Text>
+                  </View>
+                ) : (
+                  <Pressable style={styles.sheetBtn} onPress={doImport}>
+                    <Text style={styles.sheetBtnText}>导入</Text>
+                  </Pressable>
+                )}
+              </>
+            )}
+            <Pressable style={styles.sheetCancel} onPress={closeImport}>
               <Text style={styles.sheetCancelText}>取消</Text>
             </Pressable>
           </Pressable>
@@ -380,4 +543,24 @@ const styles = StyleSheet.create({
   sheetBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   sheetCancel: { alignItems: 'center', marginTop: 12 },
   sheetCancelText: { color: '#8A9099', fontSize: 13 },
+  importInput: { height: 96, textAlignVertical: 'top', marginTop: 4 },
+  importHint: { fontSize: 12, color: '#8A9099', marginBottom: 10, lineHeight: 18 },
+  importChips: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
+  importChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E3E6EA',
+    backgroundColor: '#F7F8FA',
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  importChipOn: { borderColor: RED, backgroundColor: '#FDECEC' },
+  importChipText: { fontSize: 12, color: '#5B6066' },
+  importChipTextOn: { color: RED, fontWeight: '600' },
+  importError: { fontSize: 12, color: '#E54040', marginTop: 8 },
+  importBusy: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 14 },
+  importBusyText: { fontSize: 13, color: '#8A9099', marginLeft: 8 },
+  importInfo: { fontSize: 14, color: '#1F2329', textAlign: 'center', paddingVertical: 10, lineHeight: 20 },
 });
