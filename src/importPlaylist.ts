@@ -77,9 +77,10 @@ export function parseShareInput(text: string): ParsedShare {
     t.match(/kugou\.com\/special\/single\/(\d{5,})/i);
   if (kg) return { kind: 'link', platform: 'kg', id: kg[1] };
 
-  // 短链（163cn.tv / c6.y.qq.com 等）：返回 kind='id' 交由调用方跟随跳转后重新解析
-  if (/^(https?:\/\/)?(163cn\.tv|c6\.y\.qq\.com|6cn\.tv)\//i.test(t)) {
-    return { kind: 'link', platform: undefined, id: undefined, shortUrl: t };
+  // 短链（163cn.tv / c6.y.qq.com 等）：在文本中查找 URL，交由调用方跟随跳转后提取歌单 ID
+  const short = t.match(/(?:https?:\/\/)?(?:163cn\.tv|c6\.y\.qq\.com|6cn\.tv)\/[A-Za-z0-9_-]+/i);
+  if (short) {
+    return { kind: 'link', platform: undefined, id: undefined, shortUrl: short[0].replace(/[).,;]+$/, '') };
   }
 
   // 纯数字 ID（>=4 位）
@@ -116,12 +117,14 @@ export async function fetchWyPlaylist(id: string): Promise<ImportedList> {
     `https://music.163.com/api/playlist/detail?id=${id}`,
   ];
   let lastError: unknown = null;
+  const nmtid = 'NMTID=00' + Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+  const hdr = { Referer: 'https://music.163.com/', Cookie: nmtid };
   let plName = `网易云歌单 ${id}`;
   let trackIds: number[] = [];
   let songs: Song[] = [];
   for (const url of urls) {
     try {
-      const data = await fetchJson(url, { Referer: 'https://music.163.com/' });
+      const data = await fetchJson(url, hdr);
       const pl = data?.playlist ?? data?.result ?? {};
       if (pl?.name) plName = String(pl.name);
       trackIds = (pl?.trackIds ?? []).map((x: any) => Number(x?.id)).filter(Boolean);
@@ -139,9 +142,10 @@ export async function fetchWyPlaylist(id: string): Promise<ImportedList> {
       const batch = missing.slice(i, i + 100);
       try {
         const c = encodeURIComponent(JSON.stringify(batch.map(x => ({ id: x }))));
-        const data = await fetchJson(`https://music.163.com/api/v3/song/detail?c=${c}`, {
-          Referer: 'https://music.163.com/',
-        });
+        let data: any = null;
+        for (let attempt = 0; attempt < 2 && !data?.songs; attempt++) {
+          data = await fetchJson(`https://music.163.com/api/v3/song/detail?c=${c}`, hdr);
+        }
         const list: any[] = data?.songs ?? [];
         for (const it of list) {
           if (!it?.id) continue;
