@@ -282,17 +282,26 @@ export interface TextSongLine {
   singer?: string;
 }
 
-/** 解析多行文本：每行「歌名 歌手」或「歌名 - 歌手」 */
+/** 解析多行文本：每行「歌名 歌手」或「歌名 - 歌手」（兼容行首序号、全角标点） */
 export function parseTextSongs(text: string): TextSongLine[] {
   return text
     .split(/\r?\n/)
     .map(line => line.trim())
     .filter(Boolean)
     .map(line => {
-      const sep = line.split(/\s+[-–—]\s+|\s+/);
-      const name = sep[0]?.trim() || '';
-      const singer = sep.length > 1 ? sep.slice(1).join(' ').trim() : undefined;
+      // 剥行首序号：1. / 01、 / （2） / 3) 等
+      const noNum = line.replace(/^\s*[（(]?\d+[）).、:：)]*\s*/, '');
+      // 分隔符形式：歌名 - 歌手 / 歌名-歌手 / 歌名 – 歌手
+      const sep = noNum.match(/^(.*?)\s*[-–—]\s*(.+)$/);
+      if (sep && sep[1].trim()) {
+        return { name: sep[1].trim(), singer: sep[2].trim() };
+      }
+      // 空格形式：歌名 歌手
+      const parts = noNum.split(/\s+/);
+      const name = parts[0]?.trim() || '';
+      const singer = parts.length > 1 ? parts.slice(1).join(' ').trim() : undefined;
       return { name, singer };
     })
     .filter(x => x.name);
 }
+

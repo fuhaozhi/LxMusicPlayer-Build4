@@ -13,8 +13,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { parseShareInput, fetchWyPlaylist, fetchTxPlaylist, fetchKgPlaylist, parseTextSongs } from '../importPlaylist';
-import { searchNetease, BAD_VERSION } from '../searchSources';
+import { parseShareInput, fetchWyPlaylist, fetchTxPlaylist, fetchKgPlaylist, parseTextSongs, type TextSongLine } from '../importPlaylist';
+import { SEARCH_PICKER, BAD_VERSION } from '../searchSources';
 import { usePlayer } from '../player/PlayerContext';
 import { useLibrary } from '../library';
 import SongArt from '../components/SongArt';
@@ -118,23 +118,35 @@ export default function MineScreen({
         const r = await fetchByPlatform(importPlatform, parsed.id!);
         result = { name: r.name, count: r.songs.length, songs: r.songs };
       } else {
-        // 文本导入：多行「歌名 歌手」，按网易云匹配
+        // 文本导入：多行「歌名 歌手」，酷我优先（搜索页实测最稳）、网易兜底
         const lines = parseTextSongs(importText);
         if (!lines.length) throw new Error('没有可识别的歌曲，请检查输入');
+        const kwSrc = SEARCH_PICKER.find(s => s.id === 'kw')!;
+        const wySrc = SEARCH_PICKER.find(s => s.id === 'wy')!;
+        const matchLine = async (ln: TextSongLine): Promise<Song | undefined> => {
+          const candidates = ln.singer ? [`${ln.name} ${ln.singer}`, ln.name] : [ln.name];
+          for (const src of [kwSrc, wySrc]) {
+            for (const kw of candidates) {
+              try {
+                const res = await src.run(kw);
+                const found = res.find(s => !BAD_VERSION.test(s.name));
+                if (found) return found;
+              } catch {
+                /* 换下一候选 / 下一源 */
+              }
+            }
+          }
+          return undefined;
+        };
         const songs: Song[] = [];
         let failed = 0;
-        for (const ln of lines.slice(0, 100)) {
-          try {
-            const kw = ln.singer ? `${ln.name} ${ln.singer}` : ln.name;
-            const res = await searchNetease(kw);
-            const hit = res.find(s => !BAD_VERSION.test(s.name));
-            if (hit) songs.push(hit);
-            else failed++;
-          } catch {
-            failed++;
-          }
+        for (let i = 0; i < lines.slice(0, 100).length; i += 8) {
+          const batch = lines.slice(i, i + 8);
+          const hits = await Promise.all(batch.map(matchLine));
+          hits.forEach(h => (h ? songs.push(h) : failed++));
         }
-        if (!songs.length) throw new Error('未能匹配到任何歌曲（文本按网易云匹配）');
+        if (!songs.length)
+          throw new Error('未能匹配到任何歌曲，请检查每行格式（歌名 歌手），或改用链接导入');
         result = { name: `文本导入（成功 ${songs.length}/${lines.length}）`, count: songs.length, songs };
       }
       setImportResult(result);
