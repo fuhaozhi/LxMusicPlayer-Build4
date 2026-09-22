@@ -1,13 +1,11 @@
 /**
  * 我的 —— 网易云风格：红色渐变头部 + 听歌统计 + 最近播放 / 自建歌单 / 收藏歌单 / 设置
  */
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Keyboard,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -79,19 +77,6 @@ export default function MineScreen({
   };
 
 
-  // 键盘避让：弹窗输入时被键盘遮挡则整体上移
-  const [kbHeight, setKbHeight] = useState(0);
-  useEffect(() => {
-    const s1 = Keyboard.addListener('keyboardWillShow', (e: any) =>
-      setKbHeight(e?.endCoordinates?.height ?? 280),
-    );
-    const s2 = Keyboard.addListener('keyboardWillHide', () => setKbHeight(0));
-    return () => {
-      s1.remove();
-      s2.remove();
-    };
-  }, []);
-
   // —— 导入歌单 ——
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState('');
@@ -114,13 +99,19 @@ export default function MineScreen({
         const r = await fetchByPlatform(parsed.platform, parsed.id);
         result = { name: r.name, count: r.songs.length, songs: r.songs };
       } else if (parsed.kind === 'link' && parsed.shortUrl) {
-        // 短链：跟随跳转拿最终地址再解析
+        // 短链（163cn.tv 等）：跟随跳转后从最终 URL 或页面 HTML 提取歌单 ID
         const resp = await fetch(parsed.shortUrl, {
           headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15' },
         });
-        const re = parseShareInput(resp.url || '');
-        if (!re.platform || !re.id) throw new Error('短链无法识别歌单，请打开后复制完整链接');
-        const r = await fetchByPlatform(re.platform, re.id);
+        let idMatch = (resp.url || '').match(/[?&#]id=(\d{5,})/);
+        if (!idMatch) {
+          const html = await resp.text();
+          idMatch =
+            html.match(/playlist\?[^\s"'<>]*?id=(\d{5,})/) ||
+            html.match(/[?&#]id=(\d{5,})/);
+        }
+        if (!idMatch) throw new Error('短链无法识别歌单，请打开后复制完整链接');
+        const r = await fetchByPlatform('wy', idMatch[1]);
         result = { name: r.name, count: r.songs.length, songs: r.songs };
       } else if (parsed.kind === 'id') {
         if (importPlatform === 'auto') throw new Error('检测到歌单 ID，请选择平台');
@@ -301,9 +292,8 @@ export default function MineScreen({
 
       {/* 新建歌单弹窗 */}
       <Modal visible={creating} transparent animationType="fade" onRequestClose={() => setCreating(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.maskWrap}>
         <Pressable style={styles.mask} onPress={() => setCreating(false)}>
-          <Pressable style={[styles.sheet, { marginBottom: kbHeight }]} onPress={() => {}}>
+          <Pressable style={styles.sheet} onPress={e => { e.stopPropagation(); Keyboard.dismiss(); }}>
             <Text style={styles.sheetTitle}>新建歌单</Text>
             <TextInput
               style={styles.sheetInput}
@@ -321,14 +311,12 @@ export default function MineScreen({
             </Pressable>
           </Pressable>
         </Pressable>
-        </KeyboardAvoidingView>
       </Modal>
 
       {/* 导入歌单弹窗 */}
       <Modal visible={importOpen} transparent animationType="fade" onRequestClose={closeImport}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.maskWrap}>
         <Pressable style={styles.mask} onPress={closeImport}>
-          <Pressable style={[styles.sheet, { marginBottom: kbHeight }]} onPress={() => {}}>
+          <Pressable style={styles.sheet} onPress={e => { e.stopPropagation(); Keyboard.dismiss(); }}>
             <Text style={styles.sheetTitle}>导入歌单</Text>
             {importResult ? (
               <>
@@ -390,7 +378,6 @@ export default function MineScreen({
             </Pressable>
           </Pressable>
         </Pressable>
-        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -536,7 +523,6 @@ const styles = StyleSheet.create({
   settingsIconText: { fontSize: 17, color: RED },
   settingsText: { flex: 1, fontSize: 15, color: '#1F2329', fontWeight: '500', paddingLeft: 12 },
   settingsGo: { fontSize: 22, color: '#C0C6CC' },
-  maskWrap: { flex: 1 },
   mask: { flex: 1, backgroundColor: 'rgba(20,24,28,0.4)', justifyContent: 'center', paddingHorizontal: 40 },
   sheet: {
     backgroundColor: '#FFFFFF',

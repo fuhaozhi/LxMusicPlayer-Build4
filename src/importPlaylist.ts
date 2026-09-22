@@ -57,10 +57,10 @@ export function parseShareInput(text: string): ParsedShare {
   const t = text.trim();
   if (!t) return { kind: 'text' };
 
-  // 网易云
+  // 网易云（兼容 music.163.com / y.music.163.com / 移动版 / id 位于 &id= 的链接）
   const wy =
-    t.match(/(?:music\.163\.com[^\s]*?[?&#]id=|music\.163\.com\/(?:#\/)?playlist[^\s]*?\/)(\d{5,})/i) ||
-    t.match(/music\.163\.com\/playlist[^\s]*?(\d{5,})/i);
+    t.match(/(?:music\.163\.com|y\.music\.163\.com)[^\s]*?[?&#]id=(\d{5,})/i) ||
+    t.match(/(?:music\.163\.com|y\.music\.163\.com)\/(?:#\/)?playlist[^\s]*?(\d{5,})/i);
   if (wy) return { kind: 'link', platform: 'wy', id: wy[1] };
 
   // QQ 音乐
