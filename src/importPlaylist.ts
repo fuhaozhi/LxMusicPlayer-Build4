@@ -95,7 +95,20 @@ export interface ImportedList {
   songs: Song[];
 }
 
-/** 网易云歌单（多候选接口，与音乐馆同一套公开接口） */
+/** 网易云歌曲对象 → Song */
+function mapWySong(it: any): Song {
+  return {
+    source: 'wy' as const,
+    id: String(it.id),
+    name: String(it.name ?? ''),
+    singer: (it.ar ?? []).map((a: any) => a?.name ?? '').join(' / '),
+    album: it.al?.name ? String(it.al.name) : undefined,
+    interval: Math.floor(Number(it.dt ?? 0) / 1000) || undefined,
+    pic: it.al?.picUrl ? String(it.al.picUrl).replace(/^http:/, 'https:') : undefined,
+  };
+}
+
+/** 网易云歌单（大歌单：v3/detail 只返回部分 tracks，用 trackIds 全量 + song/detail 分批拉全） */
 export async function fetchWyPlaylist(id: string): Promise<ImportedList> {
   const urls = [
     `https://music.163.com/api/v3/playlist/detail?id=${id}&n=1000`,
@@ -103,33 +116,54 @@ export async function fetchWyPlaylist(id: string): Promise<ImportedList> {
     `https://music.163.com/api/playlist/detail?id=${id}`,
   ];
   let lastError: unknown = null;
+  let plName = `网易云歌单 ${id}`;
+  let trackIds: number[] = [];
+  let songs: Song[] = [];
   for (const url of urls) {
     try {
       const data = await fetchJson(url, { Referer: 'https://music.163.com/' });
       const pl = data?.playlist ?? data?.result ?? {};
-      const tracks: any[] = data?.playlist?.tracks ?? data?.result?.tracks ?? [];
-      if (tracks.length) {
-        return {
-          platform: 'wy',
-          name: String(pl?.name ?? '网易云歌单'),
-          songs: tracks
-            .filter((it: any) => it?.id)
-            .map((it: any) => ({
-              source: 'wy' as const,
-              id: String(it.id),
-              name: String(it.name ?? ''),
-              singer: (it.ar ?? []).map((a: any) => a?.name ?? '').join(' / '),
-              album: it.al?.name ? String(it.al.name) : undefined,
-              interval: Math.floor(Number(it.dt ?? 0) / 1000) || undefined,
-              pic: it.al?.picUrl ? String(it.al.picUrl).replace(/^http:/, 'https:') : undefined,
-            })),
-        };
-      }
+      if (pl?.name) plName = String(pl.name);
+      trackIds = (pl?.trackIds ?? []).map((x: any) => Number(x?.id)).filter(Boolean);
+      songs = (pl?.tracks ?? []).filter((it: any) => it?.id).map(mapWySong);
+      if ((trackIds.length || songs.length) && plName !== `网易云歌单 ${id}`) break;
     } catch (e) {
       lastError = e;
     }
   }
-  throw lastError ?? new Error('网易云接口无返回');
+  // 大歌单：trackIds 全量 > 已返回歌曲 → song/detail 分批拉全（每批 100）
+  if (trackIds.length > songs.length) {
+    const seen = new Set(songs.map(s => s.id));
+    const missing = trackIds.filter(id => !seen.has(String(id)));
+    for (let i = 0; i < missing.length; i += 100) {
+      const batch = missing.slice(i, i + 100);
+      try {
+        const c = encodeURIComponent(JSON.stringify(batch.map(x => ({ id: x }))));
+        const data = await fetchJson(`https://music.163.com/api/v3/song/detail?c=${c}`, {
+          Referer: 'https://music.163.com/',
+        });
+        const list: any[] = data?.songs ?? [];
+        for (const it of list) {
+          if (!it?.id) continue;
+          const key = String(it.id);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          songs.push(mapWySong(it));
+        }
+      } catch {
+        /* 单批失败跳过，保留已拉到的部分 */
+      }
+    }
+    // 按歌单原始顺序重排
+    if (songs.length) {
+      const byId = new Map(songs.map(s => [s.id, s]));
+      songs = trackIds
+        .map(id => byId.get(String(id)))
+        .filter((s): s is Song => Boolean(s));
+    }
+  }
+  if (!songs.length) throw lastError ?? new Error('网易云接口无返回');
+  return { platform: 'wy', name: plName, songs };
 }
 
 /** QQ 音乐歌单（分页拉全） */
